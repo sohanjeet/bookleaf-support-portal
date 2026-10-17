@@ -1,20 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { tBase } from '../../motion';
 import { Ticket, TicketStatus, TicketCategory, TicketPriority } from '../../types';
 import { api } from '../../services/api';
+import { useFreshItems } from '../../useFreshItems';
 import { useRealtime } from '../../context/RealtimeContext';
 import { StatusBadge } from '../../components/StatusBadge';
 import { PriorityBadge } from '../../components/PriorityBadge';
 import {
   Search,
-  Filter,
   Flame,
   Clock,
-  Sparkles,
   Ticket as TicketIcon,
   ChevronRight,
   AlertTriangle,
-  User as UserIcon,
-  BookOpen
+  BookOpen,
+  X,
+  CheckCircle2,
+  Filter,
+  RefreshCw,
+  ArrowUpDown,
+  UserCheck
 } from 'lucide-react';
 
 interface Props {
@@ -28,12 +34,16 @@ export const TicketQueuePage: React.FC<Props> = ({ onSelectTicket }) => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'sla' | 'newest' | 'priority'>('sla');
+  const [activeTab, setActiveTab] = useState<'all' | 'unresolved' | 'critical' | 'high' | 'resolved'>('all');
   const [realtimeNotification, setRealtimeNotification] = useState<string | null>(null);
 
   const { subscribeToTickets } = useRealtime();
+  const freshTickets = useFreshItems(loading ? [] : tickets.map(t => t.ticket_id), 'queue');
 
   const fetchTickets = async () => {
     try {
+      setLoading(true);
       const res = await api.getTickets({
         status: statusFilter !== 'all' ? (statusFilter as TicketStatus) : undefined,
         category: categoryFilter !== 'all' ? (categoryFilter as TicketCategory) : undefined,
@@ -56,11 +66,11 @@ export const TicketQueuePage: React.FC<Props> = ({ onSelectTicket }) => {
   useEffect(() => {
     const handler = setTimeout(() => {
       fetchTickets();
-    }, 250);
+    }, 220);
     return () => clearTimeout(handler);
   }, [search]);
 
-  // Subscribe to real-time events
+  // Subscribe to real-time events via SSE
   useEffect(() => {
     const unsubscribe = subscribeToTickets((updatedTicket, eventType) => {
       setTickets(prev => {
@@ -75,9 +85,9 @@ export const TicketQueuePage: React.FC<Props> = ({ onSelectTicket }) => {
       });
 
       if (eventType === 'ticket_created') {
-        setRealtimeNotification(`⚡ New incoming query from ${updatedTicket.author_name} (AI Priority: ${updatedTicket.priority})`);
+        setRealtimeNotification(`New incoming ticket from ${updatedTicket.author_name} (AI Priority: ${updatedTicket.priority})`);
       } else if (eventType === 'new_message') {
-        setRealtimeNotification(`💬 New reply on ticket ${updatedTicket.ticket_id}`);
+        setRealtimeNotification(`New author message on ticket ${updatedTicket.ticket_id}`);
       }
       setTimeout(() => setRealtimeNotification(null), 5000);
     });
@@ -94,285 +104,447 @@ export const TicketQueuePage: React.FC<Props> = ({ onSelectTicket }) => {
     'General Inquiry'
   ];
 
+  // Counts
   const totalCritical = tickets.filter(t => t.priority === 'Critical' && t.status !== 'Resolved' && t.status !== 'Closed').length;
   const totalHigh = tickets.filter(t => t.priority === 'High' && t.status !== 'Resolved' && t.status !== 'Closed').length;
   const totalUnresolved = tickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
+  const totalResolved = tickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
+
+  // Filtered & Sorted tickets
+  const displayedTickets = useMemo(() => {
+    let list = tickets.filter(ticket => {
+      if (activeTab === 'unresolved') return ticket.status === 'Open' || ticket.status === 'In Progress';
+      if (activeTab === 'critical') return ticket.priority === 'Critical' && ticket.status !== 'Resolved' && ticket.status !== 'Closed';
+      if (activeTab === 'high') return ticket.priority === 'High' && ticket.status !== 'Resolved' && ticket.status !== 'Closed';
+      if (activeTab === 'resolved') return ticket.status === 'Resolved' || ticket.status === 'Closed';
+      return true;
+    });
+
+    // Sorting
+    return list.sort((a, b) => {
+      if (sortBy === 'sla') {
+        // Priority weight: Critical (4) > High (3) > Medium (2) > Low (1)
+        const weight: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+        const wDiff = (weight[b.priority] || 0) - (weight[a.priority] || 0);
+        if (wDiff !== 0) return wDiff;
+        // Oldest created first for unresolved SLA
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      } else if (sortBy === 'newest') {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      } else if (sortBy === 'priority') {
+        const weight: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+        return (weight[b.priority] || 0) - (weight[a.priority] || 0);
+      }
+      return 0;
+    });
+  }, [tickets, activeTab, sortBy]);
+
+  const hasActiveFilters = statusFilter !== 'all' || priorityFilter !== 'all' || categoryFilter !== 'all' || search || activeTab !== 'all';
+
+  const resetAllFilters = () => {
+    setStatusFilter('all');
+    setCategoryFilter('all');
+    setPriorityFilter('all');
+    setSearch('');
+    setActiveTab('all');
+  };
 
   return (
     <div>
-      {/* Top Banner & KPI Metrics */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h2>Author Support & Triage Operations Queue</h2>
-          <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-            AI auto-classified queries with real-time streaming and BookLeaf Knowledge Base response engine.
-          </p>
-        </div>
-
+      {/* Real-time SSE Notification Banner */}
+      <AnimatePresence>
         {realtimeNotification && (
-          <div
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={tBase}
             style={{
-              background: 'linear-gradient(90deg, #0d9488, #0284c7)',
+              background: 'var(--brand-700)',
               color: 'white',
-              padding: '0.5rem 1rem',
-              borderRadius: '8px',
-              fontSize: '0.82rem',
-              fontWeight: 600,
-              boxShadow: '0 4px 12px rgba(13, 148, 136, 0.4)',
-              animation: 'fadeIn 0.2s ease-out'
+              padding: '0.65rem 1.25rem',
+              borderRadius: 'var(--radius-md)',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '0.84rem',
+              fontWeight: 500,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)'
             }}
           >
-            {realtimeNotification}
-          </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34D399', display: 'inline-block' }} />
+              <span>{realtimeNotification}</span>
+            </div>
+            <button
+              onClick={() => setRealtimeNotification(null)}
+              style={{ background: 'transparent', border: 'none', color: 'rgba(255, 255, 255, 0.7)', cursor: 'pointer', padding: 2 }}
+              aria-label="Dismiss notification"
+            >
+              <X size={16} />
+            </button>
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
 
-      {/* Metric Cards Row */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>
-            <span>UNRESOLVED QUEUE</span>
-            <Clock size={16} color="#fbbf24" />
+      {/* Page Header */}
+      <div className="page-header">
+        <div className="page-header-row">
+          <div>
+            <h1 className="page-title">Operations Triage Queue</h1>
+            <p className="page-subtitle">
+              High-density author issue management. Incoming tickets are AI-classified and matched against BookLeaf knowledge base policies for rapid resolution.
+            </p>
           </div>
-          <div style={{ fontSize: '1.85rem', fontWeight: 800, marginTop: '0.35rem' }}>
-            {totalUnresolved}
-          </div>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Oldest unresolved sorted first</span>
-        </div>
-
-        <div className="card" style={{ border: totalCritical > 0 ? '1px solid rgba(244, 63, 94, 0.4)' : undefined }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>
-            <span>CRITICAL REVENUE BLOCKERS</span>
-            <Flame size={16} color="#f43f5e" />
-          </div>
-          <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#f43f5e', marginTop: '0.35rem' }}>
-            {totalCritical}
-          </div>
-          <span style={{ fontSize: '0.72rem', color: '#f43f5e' }}>e.g. Amazon "Currently Unavailable"</span>
-        </div>
-
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>
-            <span>HIGH PRIORITY TICKETS</span>
-            <AlertTriangle size={16} color="#fb923c" />
-          </div>
-          <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#fb923c', marginTop: '0.35rem' }}>
-            {totalHigh}
-          </div>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>ISBN errors, royalties &gt; ₹1,000, misprints</span>
-        </div>
-
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>
-            <span>AI ASSISTED COVERAGE</span>
-            <Sparkles size={16} className="text-brand" />
-          </div>
-          <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#2dd4bf', marginTop: '0.35rem' }}>
-            100%
-          </div>
-          <span style={{ fontSize: '0.72rem', color: '#2dd4bf' }}>Auto-classified & draft prepared</span>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={fetchTickets}
+            title="Refresh queue"
+            style={{ gap: '0.45rem' }}
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh Queue</span>
+          </button>
         </div>
       </div>
 
-      {/* Filters Bar */}
+      {/* Triage Strip (Linear-Style Segmented Control, Replaces Generic 4 Cards) */}
+      <div className="triage-strip">
+        <div className="triage-tabs">
+          <button
+            className={`triage-tab ${activeTab === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveTab('all')}
+          >
+            <span>All Tickets</span>
+            <span className="triage-count">{tickets.length}</span>
+          </button>
+
+          <button
+            className={`triage-tab ${activeTab === 'unresolved' ? 'active' : ''}`}
+            onClick={() => setActiveTab('unresolved')}
+          >
+            <Clock size={12} style={{ color: 'var(--status-progress-text)' }} />
+            <span>Needs Attention</span>
+            <span className="triage-count">{totalUnresolved}</span>
+          </button>
+
+          <button
+            className={`triage-tab ${activeTab === 'critical' ? 'active' : ''}`}
+            onClick={() => setActiveTab('critical')}
+          >
+            <Flame size={12} style={{ color: 'var(--priority-critical-text)' }} />
+            <span>Critical Blockers</span>
+            <span className={`triage-count ${totalCritical > 0 ? 'critical' : ''}`}>{totalCritical}</span>
+          </button>
+
+          <button
+            className={`triage-tab ${activeTab === 'high' ? 'active' : ''}`}
+            onClick={() => setActiveTab('high')}
+          >
+            <AlertTriangle size={12} style={{ color: 'var(--priority-high-text)' }} />
+            <span>High Priority</span>
+            <span className={`triage-count ${totalHigh > 0 ? 'high' : ''}`}>{totalHigh}</span>
+          </button>
+
+          <button
+            className={`triage-tab ${activeTab === 'resolved' ? 'active' : ''}`}
+            onClick={() => setActiveTab('resolved')}
+          >
+            <CheckCircle2 size={12} style={{ color: 'var(--status-resolved-text)' }} />
+            <span>Resolved</span>
+            <span className="triage-count">{totalResolved}</span>
+          </button>
+        </div>
+
+        <div className="ai-coverage-chip">
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--brand-600)', display: 'inline-block' }} />
+          <span>AI Auto-Triage Active · 100% Coverage</span>
+        </div>
+      </div>
+
+      {/* Linear-Style Search & Filters Bar */}
       <div
-        className="card mb-4"
         style={{
-          padding: '1rem 1.25rem',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '0.65rem 0.85rem',
+          marginBottom: '1rem',
           display: 'flex',
-          gap: '1rem',
+          gap: '0.65rem',
           alignItems: 'center',
-          flexWrap: 'wrap'
+          flexWrap: 'wrap',
+          boxShadow: 'var(--shadow-xs)'
         }}
       >
         {/* Search */}
-        <div style={{ flex: '1 1 240px', position: 'relative' }}>
-          <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+        <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
+          <Search
+            size={16}
+            style={{
+              position: 'absolute',
+              left: '0.75rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-muted)'
+            }}
+          />
           <input
             type="text"
             className="form-control"
-            style={{ paddingLeft: '32px' }}
-            placeholder="Search by ticket ID, author, book, subject..."
+            placeholder="Filter ticket ID, author, book title, or issue..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            style={{ paddingLeft: '2.1rem', fontSize: '0.82rem', height: '34px' }}
           />
+          {search && (
+            <button aria-label="Clear search"
+              onClick={() => setSearch('')}
+              style={{
+                position: 'absolute',
+                right: '0.6rem',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
 
-        {/* Status Filter */}
-        <div style={{ minWidth: '140px' }}>
+        {/* Filter Selects */}
+        <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <select
             className="form-select"
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
+            style={{ width: 'auto', minWidth: 120, fontSize: '0.78rem', height: '34px', padding: '0 1.75rem 0 0.65rem' }}
           >
-            <option value="all">All Statuses</option>
+            <option value="all">Status: All</option>
             <option value="Open">Open</option>
             <option value="In Progress">In Progress</option>
             <option value="Resolved">Resolved</option>
             <option value="Closed">Closed</option>
           </select>
-        </div>
 
-        {/* Priority Filter */}
-        <div style={{ minWidth: '140px' }}>
           <select
             className="form-select"
             value={priorityFilter}
             onChange={e => setPriorityFilter(e.target.value)}
+            style={{ width: 'auto', minWidth: 120, fontSize: '0.78rem', height: '34px', padding: '0 1.75rem 0 0.65rem' }}
           >
-            <option value="all">All Priorities</option>
+            <option value="all">Priority: All</option>
             <option value="Critical">Critical</option>
             <option value="High">High</option>
             <option value="Medium">Medium</option>
             <option value="Low">Low</option>
           </select>
-        </div>
 
-        {/* Category Filter */}
-        <div style={{ minWidth: '180px' }}>
           <select
             className="form-select"
             value={categoryFilter}
             onChange={e => setCategoryFilter(e.target.value)}
+            style={{ width: 'auto', minWidth: 150, fontSize: '0.78rem', height: '34px', padding: '0 1.75rem 0 0.65rem' }}
           >
-            <option value="all">All Categories</option>
-            {categories.map(c => (
-              <option key={c} value={c}>{c}</option>
+            <option value="all">Category: All</option>
+            {categories.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
-        </div>
 
-        {(statusFilter !== 'all' || priorityFilter !== 'all' || categoryFilter !== 'all' || search) && (
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => {
-              setStatusFilter('all');
-              setPriorityFilter('all');
-              setCategoryFilter('all');
-              setSearch('');
-            }}
-          >
-            Reset Filters
-          </button>
-        )}
+          {/* Sort Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <select
+              className="form-select"
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as any)}
+              style={{ width: 'auto', minWidth: 140, fontSize: '0.78rem', height: '34px', padding: '0 1.75rem 0 0.65rem' }}
+              title="Change queue sort order"
+            >
+              <option value="sla">Sort: SLA Urgency</option>
+              <option value="newest">Sort: Most Recent</option>
+              <option value="priority">Sort: Priority Only</option>
+            </select>
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={resetAllFilters}
+              style={{ fontSize: '0.76rem', color: 'var(--accent-rose)', padding: '0.2rem 0.5rem' }}
+            >
+              <X size={16} />
+              Reset
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Ticket List Table */}
-      {loading ? (
-        <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>Loading ticket queue...</div>
-      ) : tickets.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-          <TicketIcon size={40} style={{ color: '#64748b', margin: '0 auto 0.75rem' }} />
-          <h3>No tickets match your filter criteria</h3>
-          <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Try clearing filters or search query.</p>
-        </div>
-      ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-responsive">
-            <table className="custom-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '100px' }}>Priority</th>
-                  <th style={{ width: '110px' }}>Status</th>
-                  <th>Query Details & Subject</th>
-                  <th>Author</th>
-                  <th>Category</th>
-                  <th>Assignee</th>
-                  <th>Age / Created</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tickets.map(ticket => {
-                  const isCritical = ticket.priority === 'Critical';
-                  const isHigh = ticket.priority === 'High';
-                  const isUnresolved = ticket.status === 'Open' || ticket.status === 'In Progress';
+      {/* High-Density Triage Table */}
+      <div className="table-container">
+        {displayedTickets.length === 0 ? (
+          <div className="m-fade" style={{ padding: '3.5rem 2rem', textAlign: 'center' }}>
+            <div className="empty-state-icon-pop" style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg-secondary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+              <TicketIcon size={18} />
+            </div>
+            <h3 style={{ fontSize: '1rem', marginBottom: '0.25rem', color: 'var(--text-highlight)' }}>
+              No matching tickets found
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', maxWidth: 400, margin: '0 auto 1.25rem' }}>
+              No tickets matched the current filter criteria. Try clearing search filters or selecting a different status tab.
+            </p>
+            {hasActiveFilters && (
+              <button className="btn btn-secondary btn-sm" onClick={resetAllFilters}>
+                Clear Active Filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th style={{ width: '95px' }}>Priority</th>
+                <th style={{ width: '105px' }}>Status</th>
+                <th>Query Details</th>
+                <th style={{ width: '190px' }}>Author</th>
+                <th style={{ width: '170px' }}>Category</th>
+                <th style={{ width: '120px' }}>Logged</th>
+                <th style={{ width: '85px', textAlign: 'right' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody key={`${activeTab}|${statusFilter}|${categoryFilter}|${priorityFilter}|${sortBy}`} className="m-swap">
+              {displayedTickets.map(ticket => {
+                const authorInitial = ticket.author_name ? ticket.author_name[0].toUpperCase() : 'A';
+                const createdDate = new Date(ticket.created_at);
+                const isCritical = ticket.priority === 'Critical' && ticket.status !== 'Resolved' && ticket.status !== 'Closed';
 
-                  return (
-                    <tr
-                      key={ticket.ticket_id}
-                      onClick={() => onSelectTicket(ticket.ticket_id)}
-                      style={{
-                        cursor: 'pointer',
-                        background: isCritical && isUnresolved ? 'rgba(244, 63, 94, 0.05)' : undefined
-                      }}
-                    >
-                      <td>
-                        <PriorityBadge priority={ticket.priority} />
-                      </td>
-
-                      <td>
-                        <StatusBadge status={ticket.status} />
-                      </td>
-
-                      <td>
-                        <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.92rem' }}>
-                          {ticket.subject}
+                return (
+                  <tr
+                    key={ticket.ticket_id}
+                    className={freshTickets.has(ticket.ticket_id) ? 'm-flash' : undefined}
+                    onClick={() => onSelectTicket(ticket.ticket_id)}
+                    style={{
+                      cursor: 'pointer',
+                      background: isCritical ? 'rgba(254, 242, 242, 0.45)' : undefined
+                    }}
+                  >
+                    <td>
+                      <PriorityBadge priority={ticket.priority} />
+                    </td>
+                    <td>
+                      <StatusBadge status={ticket.status} />
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          <span
+                            style={{
+                              fontFamily: 'var(--font-ui)',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              color: 'var(--brand-700)',
+                              background: 'var(--brand-50)',
+                              padding: '1px 5px',
+                              borderRadius: 'var(--radius-xs)',
+                              border: '1px solid rgba(27, 67, 50, 0.2)'
+                            }}
+                          >
+                            {ticket.ticket_id}
+                          </span>
+                          <strong style={{ color: 'var(--text-highlight)', fontSize: '0.86rem' }}>
+                            {ticket.subject}
+                          </strong>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'flex', gap: '0.75rem', marginTop: '0.2rem' }}>
-                          <span style={{ fontFamily: 'monospace' }}>{ticket.ticket_id}</span>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
                           {ticket.book_title && (
-                            <span>📖 {ticket.book_title}</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: 'var(--text-secondary)' }}>
+                              <BookOpen size={12} className="icon-brand" />
+                              <em>{ticket.book_title}</em>
+                            </span>
                           )}
+                          <span>·</span>
                           <span>{ticket.messages.length} {ticket.messages.length === 1 ? 'msg' : 'msgs'}</span>
                         </div>
-                      </td>
-
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{ticket.author_name}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{ticket.author_email}</div>
-                      </td>
-
-                      <td>
-                        <span className="badge badge-category" style={{ fontSize: '0.72rem' }}>
-                          {ticket.category}
-                        </span>
-                        {ticket.category_overridden && (
-                          <span style={{ fontSize: '0.65rem', color: '#fb923c', display: 'block', marginTop: 2 }}>
-                            (Overridden)
-                          </span>
-                        )}
-                      </td>
-
-                      <td>
-                        {ticket.assigned_to_name ? (
-                          <span style={{ fontSize: '0.8rem', color: '#2dd4bf', fontWeight: 500 }}>
-                            {ticket.assigned_to_name}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Unassigned</span>
-                        )}
-                      </td>
-
-                      <td>
-                        <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
-                          {new Date(ticket.created_at).toLocaleDateString()}
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                          {new Date(ticket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </td>
-
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={e => {
-                            e.stopPropagation();
-                            onSelectTicket(ticket.ticket_id);
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                        <div
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: '50%',
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-default)',
+                            color: 'var(--text-primary)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 600,
+                            fontSize: '0.72rem',
+                            flexShrink: 0
                           }}
                         >
-                          Triage & AI Draft
-                          <ChevronRight size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                          {authorInitial}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ticket.author_name}
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ticket.author_email}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="badge badge-category" style={{ fontSize: '0.68rem' }}>
+                        {ticket.category}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }} className="tabular-nums">
+                        <div>{createdDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                          {createdDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        {(ticket.status === 'Open' || ticket.status === 'In Progress') && (() => {
+                          const hrs = Math.max(0, Math.floor((Date.now() - createdDate.getTime()) / 3600000));
+                          const stale = hrs >= 48;
+                          return (
+                            <div style={{ fontSize: '0.68rem', fontWeight: stale ? 650 : 400, color: stale ? 'var(--priority-critical-text)' : 'var(--text-muted)' }}>
+                              {stale ? `Unresolved ${Math.floor(hrs / 24)}d` : hrs >= 1 ? `Open ${hrs}h` : 'Just now'}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectTicket(ticket.ticket_id);
+                        }}
+                        style={{ padding: '0.25rem 0.55rem', fontSize: '0.72rem', gap: '0.25rem' }}
+                      >
+                        <span>Triage</span>
+                        <ChevronRight size={16} className="btn-arrow-icon" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 };

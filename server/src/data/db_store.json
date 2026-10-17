@@ -543,7 +543,7 @@
       "attachment_url": null,
       "attachment_name": null,
       "created_at": "2026-10-17T06:07:56.836Z",
-      "updated_at": "2026-10-17T06:10:19.640Z",
+      "updated_at": "2026-10-17T08:20:06.805Z",
       "messages": [
         {
           "message_id": "MSG-1792217276836-1",
@@ -560,6 +560,14 @@
           "sender_role": "admin",
           "message": "Hello Priya, our distribution team has initiated the manual feed refresh with Amazon India. It will be live within 24 hours.",
           "created_at": "2026-10-17T06:10:19.638Z"
+        },
+        {
+          "message_id": "MSG-1792225206787",
+          "sender_id": "USR_AUTH001",
+          "sender_name": "Priya Sharma",
+          "sender_role": "author",
+          "message": "hi",
+          "created_at": "2026-10-17T08:20:06.787Z"
         }
       ],
       "internal_notes": [
@@ -677,13 +685,13 @@
       "ai_priority": "Critical",
       "priority_overridden": false,
       "ai_priority_reasoning": "Active bestselling title unavailable for purchase, causing immediate direct sales loss.",
-      "ai_draft_response": "Dear Rohit,\n\nWe apologize for this unexpected disruption with \"Startup Sutra\" on Amazon India. We understand how critical active listing availability is for your readers and sales momentum.\n\nThis is typically caused by an intermittent platform inventory sync glitch with Repro/In-House stock feeds. We have initiated a direct re-sync with the Amazon seller catalogue team immediately. In accordance with our standard protocol, the listing will be reinstated and active within 24 to 48 hours.\n\nOur operations lead is monitoring the listing directly and will update you as soon as the buy-box is back live.\n\nWarm regards,\nBookLeaf Distribution Team",
+      "ai_draft_response": "Dear Rohit Kapoor,\n\nThank you for bringing the availability of \"Startup Sutra\" to our attention. We understand how frustrating it is when readers cannot purchase your book.\n\nWhen a published title shows as \"Currently Unavailable\" on Amazon or Flipkart, it usually indicates a temporary inventory sync glitch between our fulfillment partners (In-House / Repro India) and the retail catalog.\n\nWe have triggered an immediate manual stock re-sync with the distribution channels. Per our experience, listings typically reactivate and show live inventory within 24–48 hours.\n\nWe will monitor the listing closely and update you as soon as the buy button is active again.\n\nWarm regards,\nBookLeaf Distribution Desk",
       "assigned_to": null,
       "assigned_to_name": null,
       "attachment_url": null,
       "attachment_name": null,
       "created_at": "2026-10-17T02:03:40.499Z",
-      "updated_at": "2026-10-17T02:03:40.499Z",
+      "updated_at": "2026-10-17T12:21:52.041Z",
       "messages": [
         {
           "message_id": "MSG-004",

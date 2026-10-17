@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { MotionConfig } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RealtimeProvider } from './context/RealtimeContext';
 import { Navbar } from './components/Navbar';
@@ -11,6 +12,8 @@ import { TicketQueuePage } from './pages/admin/TicketQueuePage';
 import { TicketDetailPage } from './pages/admin/TicketDetailPage';
 import { KnowledgeBasePage } from './pages/admin/KnowledgeBasePage';
 import { AdminBooksCatalog } from './pages/admin/AdminBooksCatalog';
+import { useShellEntrance } from './animation/useShellEntrance';
+import { BookLeafLoader } from './components/BookLeafLoader';
 import { NewTicketModal } from './components/NewTicketModal';
 import { Book, Ticket } from './types';
 import { api } from './services/api';
@@ -21,6 +24,7 @@ const MainPortal: React.FC = () => {
   const [selectedAdminTicketId, setSelectedAdminTicketId] = useState<string | null>(null);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState<boolean>(false);
   const [authorBooks, setAuthorBooks] = useState<Book[]>([]);
+  const shellRef = useShellEntrance();
 
   React.useEffect(() => {
     if (user?.role === 'author') {
@@ -38,11 +42,8 @@ const MainPortal: React.FC = () => {
   };
 
   return (
-    <div className="app-container">
-      {/* 1-Click Evaluation Switcher Ribbon */}
-      <DemoUserSwitcher />
-
-      {/* Main Navbar */}
+    <div className="app-layout" ref={shellRef}>
+      {/* Editorial Sidebar Navigation */}
       <Navbar
         currentTab={currentTab}
         onSelectTab={(tab) => {
@@ -53,116 +54,104 @@ const MainPortal: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="main-content">
-        {user?.role === 'author' ? (
-          <>
-            {currentTab === 'dashboard' && (
-              <AuthorDashboard
-                onNavigateTab={(tab) => setCurrentTab(tab)}
-                onOpenSubmitModal={() => setIsSubmitModalOpen(true)}
-              />
-            )}
-            {currentTab === 'books' && <MyBooksPage />}
-            {currentTab === 'tickets' && (
-              <MyTicketsPage
-                onOpenNewTicketModal={() => setIsSubmitModalOpen(true)}
-              />
-            )}
+      <div className="main-area">
+        {/* 1-Click Evaluation Switcher Ribbon */}
+        <DemoUserSwitcher />
 
-            {/* Author Submit Support Query Modal */}
-            <NewTicketModal
-              books={authorBooks}
-              isOpen={isSubmitModalOpen}
-              onClose={() => setIsSubmitModalOpen(false)}
-              onTicketCreated={handleTicketCreated}
-            />
-          </>
-        ) : (
-          <>
-            {selectedAdminTicketId ? (
-              <TicketDetailPage
-                ticketId={selectedAdminTicketId}
-                onBack={() => setSelectedAdminTicketId(null)}
-              />
-            ) : (
-              <>
-                {currentTab === 'queue' && (
-                  <TicketQueuePage
-                    onSelectTicket={(ticketId) => setSelectedAdminTicketId(ticketId)}
-                  />
-                )}
-                {currentTab === 'books' && <AdminBooksCatalog />}
-                {currentTab === 'kb' && <KnowledgeBasePage />}
-              </>
-            )}
-          </>
-        )}
-      </main>
+        {/* Page Content */}
+        <main className="main-content">
+          <div key={`${user?.role}-${selectedAdminTicketId ?? currentTab}`} className="m-page">
+          {user?.role === 'author' ? (
+            <>
+              {currentTab === 'dashboard' && (
+                <AuthorDashboard
+                  onNavigateTab={(tab) => setCurrentTab(tab)}
+                  onOpenSubmitModal={() => setIsSubmitModalOpen(true)}
+                />
+              )}
+              {currentTab === 'books' && <MyBooksPage />}
+              {currentTab === 'tickets' && (
+                <MyTicketsPage
+                  onOpenNewTicketModal={() => setIsSubmitModalOpen(true)}
+                />
+              )}
 
-      {/* Footer */}
-      <footer
-        style={{
-          borderTop: '1px solid var(--border-subtle)',
-          padding: '1.5rem',
-          textAlign: 'center',
-          fontSize: '0.8rem',
-          color: '#64748b',
-          background: 'rgba(15, 23, 42, 0.4)'
-        }}
-      >
-        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div>
-            <strong>BookLeaf Publishing</strong> — Author Support & Communication Portal
+              {/* Author Submit Support Query Modal */}
+              <NewTicketModal
+                books={authorBooks}
+                isOpen={isSubmitModalOpen}
+                onClose={() => setIsSubmitModalOpen(false)}
+                onTicketCreated={handleTicketCreated}
+              />
+            </>
+          ) : (
+            <>
+              {selectedAdminTicketId ? (
+                <TicketDetailPage
+                  ticketId={selectedAdminTicketId}
+                  onBack={() => setSelectedAdminTicketId(null)}
+                />
+              ) : (
+                <>
+                  {currentTab === 'queue' && (
+                    <TicketQueuePage
+                      onSelectTicket={(ticketId) => setSelectedAdminTicketId(ticketId)}
+                    />
+                  )}
+                  {currentTab === 'books' && <AdminBooksCatalog />}
+                  {currentTab === 'kb' && <KnowledgeBasePage />}
+                </>
+              )}
+            </>
+          )}
           </div>
-          <div style={{ display: 'flex', gap: '1rem', color: '#94a3b8' }}>
-            <span>In-House Delhi & US Hubs</span>
-            <span>•</span>
-            <span>80/20 Royalty Split</span>
-            <span>•</span>
-            <span>Real-time SSE Active</span>
+        </main>
+
+        {/* Editorial Footer */}
+        <footer className="app-footer">
+          <div className="app-footer-brand">
+            <span className="app-footer-name">BookLeaf Publishing</span>
+            <span className="app-footer-tagline">Author Support & Operations Command</span>
           </div>
-        </div>
-      </footer>
+          <ul className="app-footer-facts">
+            <li>Delhi & US Distribution Hubs</li>
+            <li>80/20 Net Royalty</li>
+            <li>Real-Time SSE Sync</li>
+          </ul>
+        </footer>
+      </div>
     </div>
   );
 };
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
+  const [loaderGone, setLoaderGone] = useState(false);
+  const onLoaderExit = useCallback(() => setLoaderGone(true), []);
 
-  if (loading) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#090d16',
-          color: '#94a3b8'
-        }}
-      >
-        Loading BookLeaf Portal...
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <LoginPage />;
-  }
-
+  // The branded loader covers session restore only. It exits the moment `loading` clears; the login
+  // entrance waits for its exit signal so the two never overlap.
   return (
-    <RealtimeProvider>
-      <MainPortal />
-    </RealtimeProvider>
+    <>
+      {!loading && (user ? (
+        <RealtimeProvider>
+          <MainPortal />
+        </RealtimeProvider>
+      ) : (
+        <LoginPage entranceReady={loaderGone} />
+      ))}
+      <BookLeafLoader loading={loading} onExitComplete={onLoaderExit} />
+    </>
   );
 };
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <MotionConfig reducedMotion="user">
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </MotionConfig>
   );
 };
 

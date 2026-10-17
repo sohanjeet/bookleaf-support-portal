@@ -141,6 +141,7 @@ Please compose the ready-to-send support response:`;
 
         const resp = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
+          signal: AbortSignal.timeout(15000),
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.openaiApiKey}`
@@ -226,6 +227,7 @@ Format response in valid JSON with keys:
 
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
+      signal: AbortSignal.timeout(15000),
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.openaiApiKey}`
@@ -276,14 +278,21 @@ Format response in valid JSON with keys:
     combinedContent: string;
   }): AIClassificationResult {
     const { authorName, subject, description, book, combinedContent } = params;
-    const lower = combinedContent.toLowerCase();
+    const lower = combinedContent.toLowerCase().replace(/[‘’]/g, "'");
+    const isMetadataUpdate =
+      !lower.includes('isbn') &&
+      /(update|change|edit|modify|revise).{0,40}(description|blurb|bio|author name|keywords|metadata)/.test(lower);
 
     let category: TicketCategory = 'General Inquiry';
     let priority: TicketPriority = 'Medium';
     let reasoning = 'Standard author support inquiry.';
 
     // 1. Classification logic
-    if (
+    if (isMetadataUpdate) {
+      category = 'General Inquiry';
+      priority = 'Low';
+      reasoning = 'Routine request to update book description/metadata; handled via dashboard or email (3–5 business days).';
+    } else if (
       lower.includes('royalt') ||
       lower.includes('payout') ||
       lower.includes('earning') ||
@@ -294,7 +303,7 @@ Format response in valid JSON with keys:
       lower.includes('commission')
     ) {
       category = 'Royalty & Payments';
-      if (lower.includes('not received') || lower.includes('haven’t received') || lower.includes('overdue') || lower.includes('months ago') || lower.includes('delayed')) {
+      if (lower.includes('not received') || lower.includes("haven't received") || lower.includes("haven't been paid") || lower.includes('not been paid') || lower.includes('no payment') || lower.includes('never received') || lower.includes('overdue') || lower.includes('months ago') || lower.includes('delayed')) {
         priority = 'High';
         reasoning = 'Author reporting overdue or uncredited royalty earnings exceeding expected payout cycle.';
       } else if (lower.includes('too low') || lower.includes('discrepancy') || lower.includes('calculation')) {
@@ -402,34 +411,70 @@ Format response in valid JSON with keys:
     const bookTitle = book ? `"${book.title}"` : 'your title';
 
     switch (category) {
-      case 'Royalty & Payments':
-        if (book && book.royalty_pending > 0) {
+      case 'Royalty & Payments': {
+        const text = `${params.subject} ${params.description}`.toLowerCase().replace(/[‘’]/g, "'");
+        const calcQuery = /too low|discrepan|calculat|seems (low|less)|how (is|are).*(royalt|calculated)|breakdown/.test(text);
+        const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+        const formula =
+          `At BookLeaf, royalties follow an 80/20 split of net profit: 80% goes to you, 20% to BookLeaf. Net profit is the MRP minus the printing cost, the platform commission (Amazon/Flipkart) and shipping charges, so the per-copy figure is lower than the cover price.`;
+        const figures = book
+          ? `For ${bookTitle}${book.mrp ? ` (MRP ${inr(book.mrp)})` : ''}, our records show ${book.total_copies_sold} copies sold, ${inr(book.total_royalty_earned)} royalty earned${book.author_royalty_per_copy ? ` (${inr(book.author_royalty_per_copy)} per copy)` : ''}, ${inr(book.royalty_paid)} paid${book.last_royalty_payout_date ? ` (last payout on ${book.last_royalty_payout_date})` : ''} and ${inr(book.royalty_pending)} pending.`
+          : '';
+        const cycle = `Royalties are calculated quarterly and paid by direct bank transfer within 45 days of the quarter ending. Balances below ₹1,000 roll over to the next quarter.`;
+        const pendingNote = book
+          ? book.royalty_pending >= 1000
+            ? `Your pending balance of ${inr(book.royalty_pending)} is above the ₹1,000 minimum, so it will be included in the next quarterly payout.`
+            : book.royalty_pending > 0
+              ? `Your pending balance of ${inr(book.royalty_pending)} is below the ₹1,000 minimum, so it rolls over to the next quarter.`
+              : ''
+          : '';
+        const closing = `Warm regards,
+BookLeaf Author Support Team`;
+        if (calcQuery) {
           return (
-            `Dear ${authorName},\n\n` +
-            `Thank you for reaching out to BookLeaf Publishing. We completely understand your concern regarding your royalties for ${bookTitle}, and we are happy to clarify the details for you.\n\n` +
-            `According to our dashboard records, ${bookTitle} currently has an accumulated pending royalty of ₹${book.royalty_pending.toLocaleString('en-IN')} across ${book.total_copies_sold} copies sold.\n\n` +
-            `As per BookLeaf's Royalty Policy, royalties are calculated quarterly and distributed within 45 days of the quarter ending, provided accumulated earnings meet the minimum ₹1,000 threshold (which your account satisfies). Payouts are made directly via bank transfer.\n\n` +
-            `Our finance team is reviewing the current payout batch for your account to ensure your linked banking credentials are confirmed. We have logged this with our billing desk and will confirm your transfer status within 48 hours.\n\n` +
-            `Thank you for your patience and for being a valued BookLeaf author.\n\n` +
-            `Warm regards,\n` +
-            `BookLeaf Author Support Team`
-          );
-        } else {
-          return (
-            `Dear ${authorName},\n\n` +
-            `Thank you for contacting BookLeaf Publishing regarding your royalty statement.\n\n` +
-            `At BookLeaf, we follow a transparent 80/20 royalty split, where 80% of net profits (MRP minus printing costs, marketplace platform commissions, and shipping) are credited directly to the author. Royalties are calculated quarterly and disbursed within 45 days after quarter-end for balances exceeding ₹1,000.\n\n` +
-            `We would be pleased to share a comprehensive line-by-line sales and deduction breakdown for your book. Our finance team is preparing your statement and will update you directly within 48 hours.\n\n` +
-            `Warm regards,\n` +
-            `BookLeaf Author Support Team`
+            `Dear ${authorName},
+
+` +
+            `Thank you for raising this. We understand a royalty figure that looks lower than expected is worrying, and we want to be fully transparent about how it is worked out.
+
+` +
+            `${formula}
+
+` +
+            `${figures}
+
+` +
+            `Next step: we will send you a detailed line-by-line royalty breakdown (sales per platform and each deduction) within 48 hours. If anything in it doesn't add up, reply to this ticket and our finance team will review it with you.
+
+` +
+            closing
           );
         }
+        return (
+          `Dear ${authorName},
+
+` +
+          `Thank you for reaching out, and we're sorry for the worry over your royalties for ${bookTitle}. We want to give you clear answers.
+
+` +
+          `${cycle}
+
+` +
+          `${figures} ${pendingNote}`.trim() + `
+
+` +
+          `Next step: our finance team will confirm that your bank details are linked in your dashboard and share your specific next payout date within 48 hours. If your payout is overdue under the 45-day window, we will escalate it to be resolved within 48 hours of confirmation.
+
+` +
+          closing
+        );
+      }
 
       case 'ISBN & Metadata Issues':
         return (
           `Dear ${authorName},\n\n` +
           `Thank you for alerting us to this issue regarding the ISBN/metadata for ${bookTitle}. We recognize that accurate catalog data is crucial for your book's discoverability and distribution.\n\n` +
-          `We treat any ISBN discrepancy as a critical priority. We have immediately escalated your report to our Production and Metadata Distribution teams in Delhi for investigation.\n\n` +
+          `We treat any ISBN discrepancy as a high-priority issue, and we own responsibility for getting it right. We have immediately escalated your report to our Production and Metadata Distribution teams in Delhi for investigation.\n\n` +
           `Our technical specialists are cross-checking the national ISBN registry against the retailer feeds on Amazon and Flipkart. We commit to providing you with a full status update and resolution timeline within 48 hours.\n\n` +
           `Please rest assured this is receiving our team's immediate focus.\n\n` +
           `Warm regards,\n` +
@@ -472,6 +517,25 @@ Format response in valid JSON with keys:
 
       case 'General Inquiry':
       default:
+        if (/(update|change|edit|modify|revise).{0,40}(description|blurb|bio|author name|keywords|metadata)/i.test(`${params.subject} ${params.description}`)) {
+          return (
+            `Dear ${authorName},
+
+` +
+            `Thank you for reaching out. Yes, metadata updates such as your book description can be made even after a title is live.
+
+` +
+            `You can submit the change through your dashboard or reply here with the new text. Updates typically reflect on the retail platforms within 3–5 business days of submission.
+
+` +
+            `Next step: please send us the revised wording and the title it applies to, and we will take it from there.
+
+` +
+            `Warm regards,
+` +
+            `BookLeaf Author Support Team`
+          );
+        }
         return (
           `Dear ${authorName},\n\n` +
           `Thank you for reaching out to BookLeaf Publishing. We have received your query regarding "${params.subject}".\n\n` +

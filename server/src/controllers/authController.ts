@@ -18,7 +18,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const user = db.getUserByEmail(email.trim());
+    const user = db.getUserByEmail(String(email).trim());
     if (!user) {
       res.status(401).json({
         success: false,
@@ -28,17 +28,23 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Check password if provided (for demo convenience, password123 is default, or if author logs in via quick switch)
-    if (password && user.password) {
-      const match = await bcrypt.compare(password, user.password);
-      if (!match && password !== 'password123') {
-        res.status(401).json({
-          success: false,
-          error: 'InvalidCredentials',
-          message: 'Invalid password. (Default demo password is: password123)'
-        });
-        return;
-      }
+    if (!password || typeof password !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'ValidationError',
+        message: 'Password is required.'
+      });
+      return;
+    }
+
+    const match = user.password ? await bcrypt.compare(password, user.password) : false;
+    if (!match) {
+      res.status(401).json({
+        success: false,
+        error: 'InvalidCredentials',
+        message: 'Invalid email or password. (Default demo password is: password123)'
+      });
+      return;
     }
 
     // Generate JWT

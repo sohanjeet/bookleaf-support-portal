@@ -1,12 +1,23 @@
+import { CountUp } from '../../components/CountUp';
 import React, { useEffect, useState } from 'react';
 import { Book } from '../../types';
 import { api } from '../../services/api';
-import { BookOpen, AlertCircle, ShoppingBag, IndianRupee, Layers } from 'lucide-react';
+import {
+  BookOpen,
+  LayoutGrid,
+  List,
+  CheckCircle2,
+  Layers,
+  ShoppingBag,
+  IndianRupee,
+  Clock,
+} from 'lucide-react';
 
 export const MyBooksPage: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   useEffect(() => {
     api.getMyBooks()
@@ -16,95 +27,312 @@ export const MyBooksPage: React.FC = () => {
   }, []);
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Loading published titles...</div>;
-  }
-
-  if (error) {
     return (
-      <div className="card" style={{ border: '1px solid #f43f5e' }}>
-        <p style={{ color: '#fb7185' }}>Error loading books: {error}</p>
+      <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading your published titles...
       </div>
     );
   }
 
-  // Summary royalty calculations
+  if (error) {
+    return (
+      <div style={{ border: '1px solid var(--priority-critical-border)', background: 'var(--priority-critical-bg)', padding: '1rem', borderRadius: 'var(--radius-md)', color: 'var(--priority-critical-text)' }}>
+        Error loading books: {error}
+      </div>
+    );
+  }
+
   const totalEarned = books.reduce((acc, b) => acc + (b.total_royalty_earned || 0), 0);
   const totalPaid = books.reduce((acc, b) => acc + (b.royalty_paid || 0), 0);
   const totalPending = books.reduce((acc, b) => acc + (b.royalty_pending || 0), 0);
   const totalCopiesSold = books.reduce((acc, b) => acc + (b.total_copies_sold || 0), 0);
+  const liveCount = books.filter(b => b.status === 'Published & Live').length;
+  const inProductionCount = books.filter(b => b.status.includes('In Production')).length;
 
   return (
-    <div>
-      {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h2>My Published Titles & Royalties</h2>
-          <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-            Track sales, retail availability, production milestones, and quarterly payout disbursements.
-          </p>
+    <div className="m-stagger">
+      {/* Page Header */}
+      <div className="page-header">
+        <div className="page-header-row">
+          <div>
+            <h1 className="page-title">Author Library & Royalties</h1>
+            <p className="page-subtitle">
+              Your published catalog across global distribution networks. Track retail circulation, review ISBN status, and monitor royalties.
+            </p>
+          </div>
+
+          {/* View Mode Toggle: Library Grid vs Ledger Table */}
+          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', padding: '3px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)' }}>
+            <button
+              className={`btn btn-sm ${viewMode === 'grid' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setViewMode('grid')}
+              style={{ padding: '0.35rem 0.65rem', fontSize: '0.76rem', gap: '0.35rem' }}
+              title="Library Grid View"
+            >
+              <LayoutGrid size={16} />
+              <span>Library</span>
+            </button>
+            <button
+              className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setViewMode('table')}
+              style={{ padding: '0.35rem 0.65rem', fontSize: '0.76rem', gap: '0.35rem' }}
+              title="Ledger Table View"
+            >
+              <List size={16} />
+              <span>Table</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* KPI Stats Row */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="card">
-          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>Total Titles</span>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#f8fafc', marginTop: '0.25rem' }}>
-            {books.length}
+      {/* Summary Strip */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-lg)',
+          marginBottom: '2rem',
+          boxShadow: 'var(--shadow-xs)',
+          overflow: 'hidden'
+        }}
+      >
+        <div style={{ padding: '1.25rem 1.5rem', borderRight: '1px solid var(--border-subtle)' }}>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.25rem' }}>
+            Catalog Size
           </div>
-          <span style={{ fontSize: '0.72rem', color: '#2dd4bf' }}>
-            {books.filter(b => b.status === 'Published & Live').length} Live in distribution
-          </span>
+          <div style={{ fontSize: '1.85rem', fontFamily: 'var(--font-display)', fontWeight: 500, fontVariantNumeric: 'lining-nums tabular-nums', letterSpacing: '-0.015em', color: 'var(--text-highlight)' }} className="tabular-nums">
+            <CountUp value={books.length} /> {books.length === 1 ? 'Title' : 'Titles'}
+          </div>
+          <div style={{ fontSize: '0.74rem', color: 'var(--brand-700)', marginTop: '0.2rem' }}>
+            {liveCount} Live in distribution {inProductionCount > 0 ? `· ${inProductionCount} in production` : ''}
+          </div>
         </div>
 
-        <div className="card">
-          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>Total Copies Sold</span>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#38bdf8', marginTop: '0.25rem' }}>
-            {totalCopiesSold.toLocaleString('en-IN')}
+        <div style={{ padding: '1.25rem 1.5rem', borderRight: '1px solid var(--border-subtle)' }}>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.25rem' }}>
+            Total Circulation
           </div>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Across Amazon, Flipkart & Store</span>
+          <div style={{ fontSize: '1.85rem', fontFamily: 'var(--font-display)', fontWeight: 500, fontVariantNumeric: 'lining-nums tabular-nums', letterSpacing: '-0.015em', color: 'var(--text-highlight)' }} className="tabular-nums">
+            <CountUp value={totalCopiesSold} />
+          </div>
+          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+            Copies ordered across retail networks
+          </div>
         </div>
 
-        <div className="card">
-          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>Royalty Earned</span>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#34d399', marginTop: '0.25rem' }}>
-            ₹{totalEarned.toLocaleString('en-IN')}
+        <div style={{ padding: '1.25rem 1.5rem', borderRight: '1px solid var(--border-subtle)' }}>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.25rem' }}>
+            Cumulative Royalty
           </div>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>80% Net profit share</span>
+          <div style={{ fontSize: '1.85rem', fontFamily: 'var(--font-display)', fontWeight: 500, fontVariantNumeric: 'lining-nums tabular-nums', letterSpacing: '-0.015em', color: 'var(--status-resolved-text)' }} className="tabular-nums">
+            <CountUp value={totalEarned} prefix="₹" />
+          </div>
+          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+            ₹{totalPaid.toLocaleString('en-IN')} disbursed to date
+          </div>
         </div>
 
-        <div className="card" style={{ border: totalPending > 0 ? '1px solid rgba(245, 158, 11, 0.4)' : undefined }}>
-          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>Royalty Pending</span>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fbbf24', marginTop: '0.25rem' }}>
-            ₹{totalPending.toLocaleString('en-IN')}
+        <div style={{ padding: '1.25rem 1.5rem' }}>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.25rem' }}>
+            Pending Disbursement
           </div>
-          <span style={{ fontSize: '0.72rem', color: totalPending >= 1000 ? '#34d399' : '#94a3b8' }}>
-            {totalPending >= 1000 ? 'Eligible for next quarterly cycle' : 'Rolls over (< ₹1,000 min threshold)'}
-          </span>
+          <div style={{ fontSize: '1.85rem', fontFamily: 'var(--font-display)', fontWeight: 500, fontVariantNumeric: 'lining-nums tabular-nums', letterSpacing: '-0.015em', color: totalPending > 0 ? 'var(--accent-gold)' : 'var(--text-secondary)' }} className="tabular-nums">
+            <CountUp value={totalPending} prefix="₹" />
+          </div>
+          <div style={{ fontSize: '0.74rem', color: totalPending >= 1000 ? 'var(--status-resolved-text)' : 'var(--text-muted)', marginTop: '0.2rem' }}>
+            {totalPending >= 1000 ? '✓ Scheduled for next quarterly payout' : 'Threshold ₹1,000 (rolls over)'}
+          </div>
         </div>
       </div>
 
-      {/* Books Table / Detailed Cards */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-subtle)' }}>
-          <h3 style={{ fontSize: '1.1rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <BookOpen size={18} className="text-brand" />
-            Book Catalog Details
-          </h3>
-        </div>
+      {/* VIEW MODE 1: EDITORIAL LIBRARY GRID */}
+      {viewMode === 'grid' ? (
+        <div key="grid" className="m-swap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          {books.map(book => {
+            const isLive = book.status === 'Published & Live';
+            return (
+              <div
+                key={book.book_id}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '1.25rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  boxShadow: 'var(--shadow-xs)',
+                  transition: 'border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease, transform var(--dur-fast) var(--ease-out)'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brand-500)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}
+              >
+                <div style={{ display: 'flex', gap: '1.15rem' }}>
+                  {/* Book Spine / Cover Mockup */}
+                  <div
+                    style={{
+                      width: 72,
+                      height: 104,
+                      borderRadius: '3px',
+                      background: isLive
+                        ? 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)'
+                        : 'linear-gradient(135deg, #78350F 0%, #B45309 100%)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      padding: '0.5rem',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 10px rgba(0, 0, 0, 0.18)',
+                      borderLeft: '3px solid rgba(255, 255, 255, 0.4)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.62rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.85 }}>
+                      BookLeaf
+                    </div>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 600, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
+                      {book.title}
+                    </div>
+                    <div style={{ fontSize: '0.58rem', opacity: 0.7 }}>
+                      {book.genre}
+                    </div>
+                  </div>
 
-        <div className="table-responsive">
-          <table className="custom-table">
+                  {/* Title & Metadata */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ marginBottom: '0.4rem' }}>
+                      <span className={isLive ? 'badge badge-resolved' : 'badge badge-high'} style={{ fontSize: '0.68rem' }}>
+                        {isLive ? <CheckCircle2 size={12} /> : <Layers size={10} />}
+                        <span>{book.status}</span>
+                      </span>
+                    </div>
+
+                    <h3
+                      style={{
+                        fontSize: '1rem',
+                        fontWeight: 600,
+                        color: 'var(--text-highlight)',
+                        lineHeight: 1.3,
+                        marginBottom: '0.25rem',
+                        fontFamily: 'var(--font-heading)'
+                      }}
+                    >
+                      {book.title}
+                    </h3>
+
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+                      ISBN: {book.isbn || 'Pending Imprint'}
+                    </div>
+
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+                      Genre: <strong>{book.genre}</strong>
+                    </div>
+
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                      Published: <strong>{book.publication_date ? new Date(book.publication_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not yet published'}</strong>
+                      {' · '}MRP: <strong>{book.mrp ? `₹${book.mrp}` : '—'}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ledger metrics inside book card */}
+                <div
+                  style={{
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.75rem 0.9rem',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '0.5rem',
+                    textAlign: 'center'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      Sold
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--text-highlight)' }} className="tabular-nums">
+                      {(book.total_copies_sold || 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      Earned
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--status-resolved-text)' }} className="tabular-nums">
+                      ₹{(book.total_royalty_earned || 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      Paid
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--text-highlight)' }} className="tabular-nums">
+                      ₹{(book.royalty_paid || 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      Pending
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '0.86rem', color: (book.royalty_pending || 0) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)' }} className="tabular-nums">
+                      ₹{(book.royalty_pending || 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Distribution Channels */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  <span>Retail Platforms:</span>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    {book.available_on && book.available_on.length > 0 ? (
+                      book.available_on.map((ch: string, i: number) => (
+                        <span
+                          key={i}
+                          style={{
+                            fontSize: '0.65rem',
+                            padding: '1px 5px',
+                            borderRadius: 'var(--radius-xs)',
+                            background: 'var(--bg-primary)',
+                            border: '1px solid var(--border-default)',
+                            color: 'var(--text-secondary)'
+                          }}
+                        >
+                          {ch}
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: '0.7rem' }}>Not yet distributed</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* VIEW MODE 2: DENSE LEDGER TABLE */
+        <div className="table-container">
+          <table key="list" className="table m-swap">
             <thead>
               <tr>
-                <th>Book Title & ISBN</th>
-                <th>Genre</th>
-                <th>Status</th>
-                <th>MRP / Royalty</th>
-                <th>Copies Sold</th>
-                <th>Earned / Paid</th>
-                <th>Pending</th>
-                <th>Distribution Platforms</th>
+                <th>Title & ISBN</th>
+                <th style={{ width: '130px' }}>Genre</th>
+                <th style={{ width: '150px' }}>Production Status</th>
+                <th style={{ width: '130px' }}>MRP & Royalty</th>
+                <th style={{ width: '110px' }}>Circulation</th>
+                <th style={{ width: '120px' }}>Earned / Paid</th>
+                <th style={{ width: '120px' }}>Pending</th>
+                <th>Channels</th>
               </tr>
             </thead>
             <tbody>
@@ -113,12 +341,11 @@ export const MyBooksPage: React.FC = () => {
                 return (
                   <tr key={book.book_id}>
                     <td>
-                      <div style={{ fontWeight: 700, color: '#f8fafc' }}>{book.title}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>
-                        ISBN: {book.isbn || 'Pending Assignment'}
+                      <div style={{ fontWeight: 600, color: 'var(--text-highlight)', fontSize: '0.88rem' }}>
+                        {book.title}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                        ID: {book.book_id} • Pub Date: {book.publication_date || 'In Production'}
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', marginTop: 2 }}>
+                        ISBN: {book.isbn || 'Pending Assignment'}
                       </div>
                     </td>
 
@@ -128,85 +355,77 @@ export const MyBooksPage: React.FC = () => {
 
                     <td>
                       {isInProduction ? (
-                        <span
-                          className="badge"
-                          style={{
-                            background: 'rgba(251, 146, 60, 0.15)',
-                            color: '#fb923c',
-                            border: '1px solid rgba(251, 146, 60, 0.3)'
-                          }}
-                        >
-                          <Layers size={12} style={{ marginRight: 3 }} />
+                        <span className="badge badge-high" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <Layers size={12} />
                           {book.status}
                         </span>
                       ) : (
-                        <span className="badge badge-resolved">
-                          ● {book.status}
+                        <span className="badge badge-resolved" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <CheckCircle2 size={12} />
+                          {book.status}
                         </span>
                       )}
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                        {book.publication_date ? `Published ${new Date(book.publication_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Publication date pending'}
+                      </div>
                     </td>
 
                     <td>
                       {book.mrp ? (
                         <div>
-                          <strong>₹{book.mrp}</strong>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                            Royalty: ₹{book.author_royalty_per_copy}/copy
+                          <strong style={{ color: 'var(--text-highlight)', fontSize: '0.84rem' }}>₹{book.mrp}</strong>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            Royalty: ₹{book.author_royalty_per_copy || 50}/copy
                           </div>
                         </div>
                       ) : (
-                        <span style={{ color: '#64748b', fontSize: '0.8rem' }}>TBD at launch</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>In Pipeline</span>
                       )}
                     </td>
 
                     <td>
-                      <strong style={{ color: book.total_copies_sold > 0 ? '#f8fafc' : '#64748b' }}>
-                        {book.total_copies_sold.toLocaleString('en-IN')}
+                      <strong style={{ color: 'var(--text-highlight)', fontSize: '0.88rem' }} className="tabular-nums">
+                        {(book.total_copies_sold || 0).toLocaleString('en-IN')}
                       </strong>
                     </td>
 
                     <td>
-                      <div>
-                        <div style={{ color: '#34d399', fontWeight: 600 }}>₹{book.total_royalty_earned.toLocaleString('en-IN')}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Paid: ₹{book.royalty_paid.toLocaleString('en-IN')}</div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }} className="tabular-nums">
+                        ₹{(book.total_royalty_earned || 0).toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }} className="tabular-nums">
+                        Paid: ₹{(book.royalty_paid || 0).toLocaleString('en-IN')}
                       </div>
                     </td>
 
                     <td>
-                      <strong style={{ color: book.royalty_pending > 0 ? '#fbbf24' : '#64748b' }}>
-                        ₹{book.royalty_pending.toLocaleString('en-IN')}
-                      </strong>
-                      {book.last_royalty_payout_date && (
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                          Last: {book.last_royalty_payout_date}
-                        </div>
-                      )}
+                      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: (book.royalty_pending || 0) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)' }} className="tabular-nums">
+                        ₹{(book.royalty_pending || 0).toLocaleString('en-IN')}
+                      </div>
                     </td>
 
                     <td>
-                      {book.available_on && book.available_on.length > 0 ? (
-                        <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                          {book.available_on.map((ch, i) => (
+                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        {book.available_on && book.available_on.length > 0 ? (
+                          book.available_on.map((ch: string, i: number) => (
                             <span
                               key={i}
                               style={{
-                                fontSize: '0.7rem',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                color: '#cbd5e1',
-                                border: '1px solid var(--border-subtle)'
+                                fontSize: '0.68rem',
+                                padding: '1px 6px',
+                                borderRadius: 'var(--radius-xs)',
+                                background: 'var(--bg-secondary)',
+                                border: '1px solid var(--border-subtle)',
+                                color: 'var(--text-secondary)'
                               }}
                             >
                               {ch}
                             </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                          Pending distribution setup
-                        </span>
-                      )}
+                          ))
+                        ) : (
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Not yet distributed</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -214,7 +433,7 @@ export const MyBooksPage: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      )}
     </div>
   );
 };

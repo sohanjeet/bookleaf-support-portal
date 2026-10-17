@@ -31,7 +31,12 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (_req, file, cb) => {
+    const ok = /^(image\/(png|jpe?g)|application\/pdf)$/.test(file.mimetype);
+    if (ok) cb(null, true);
+    else cb(Object.assign(new Error('Only PNG, JPG or PDF attachments are supported.'), { statusCode: 400 }));
+  }
 });
 
 const router = Router();

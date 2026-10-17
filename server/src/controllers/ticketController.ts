@@ -1,8 +1,19 @@
 import { Request, Response } from 'express';
 import { db } from '../db/database.js';
 import { aiService } from '../services/aiService.js';
-import { sseService } from '../services/sseService.js';
+import { sseService, toAuthorView } from '../services/sseService.js';
 import { Ticket, TicketStatus, TicketCategory, TicketPriority, TicketMessage, InternalNote } from '../types/index.js';
+
+const STATUSES: readonly string[] = ['Open', 'In Progress', 'Resolved', 'Closed'];
+const CATEGORIES: readonly string[] = [
+  'Royalty & Payments',
+  'ISBN & Metadata Issues',
+  'Printing & Quality',
+  'Distribution & Availability',
+  'Book Status & Production Updates',
+  'General Inquiry'
+];
+const PRIORITIES: readonly string[] = ['Critical', 'High', 'Medium', 'Low'];
 
 export const getTickets = (req: Request, res: Response): void => {
   try {
@@ -24,13 +35,7 @@ export const getTickets = (req: Request, res: Response): void => {
 
     // Security/Privacy: Authors MUST NOT see internal notes or internal admin metadata
     if (user.role === 'author') {
-      tickets = tickets.map(t => {
-        const { internal_notes, ...safeTicket } = t;
-        return {
-          ...safeTicket,
-          internal_notes: [] // empty for author
-        } as Ticket;
-      });
+      tickets = tickets.map(toAuthorView);
     }
 
     res.json({
@@ -62,11 +67,7 @@ export const getTicketById = (req: Request, res: Response): void => {
 
     // Strip internal notes if author
     if (user.role === 'author') {
-      const { internal_notes, ...safeTicket } = ticket;
-      res.json({
-        success: true,
-        data: { ...safeTicket, internal_notes: [] }
-      });
+      res.json({ success: true, data: toAuthorView(ticket) });
       return;
     }
 
@@ -79,7 +80,7 @@ export const getTicketById = (req: Request, res: Response): void => {
 export const createTicket = async (req: Request, res: Response): Promise<void> => {
   try {
     const user = req.user!;
-    const { book_id, subject, description, attachment_name, attachment_url } = req.body;
+    const { book_id, subject, description } = req.body;
 
     if (!subject || !subject.trim()) {
       res.status(400).json({ success: false, error: 'ValidationError', message: 'Subject line is required.' });
@@ -93,6 +94,14 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
     let book;
     if (book_id && book_id !== 'general') {
       book = db.getBookById(book_id);
+      if (!book) {
+        res.status(400).json({ success: false, error: 'ValidationError', message: 'Selected book does not exist.' });
+        return;
+      }
+      if (user.role === 'author' && book.author_id !== user.authorId) {
+        res.status(403).json({ success: false, error: 'Forbidden', message: 'Access denied: You do not own this book.' });
+        return;
+      }
     }
 
     const ticketId = `TCK-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -125,8 +134,8 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
       ai_draft_response: aiAnalysis.draft_response,
       assigned_to: null,
       assigned_to_name: null,
-      attachment_url: attachment_url || null,
-      attachment_name: attachment_name || (req.file ? req.file.originalname : null),
+      attachment_url: req.file ? `/uploads/${req.file.filename}` : null,
+      attachment_name: req.file ? req.file.originalname : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       messages: [
@@ -150,7 +159,7 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
     res.status(201).json({
       success: true,
       message: 'Ticket submitted successfully.',
-      data: created
+      data: user.role === 'author' ? toAuthorView(created) : created
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: 'TicketCreateError', message: err.message });
@@ -171,20 +180,27 @@ export const updateTicket = (req: Request, res: Response): void => {
     const { status, category, priority, assigned_to, assigned_to_name } = req.body;
     const updates: Partial<Ticket> = {};
 
+    const invalid = (field: string, allowed: readonly string[]) => {
+      res.status(400).json({
+        success: false,
+        error: 'ValidationError',
+        message: `Invalid ${field}. Allowed values: ${allowed.join(', ')}.`
+      });
+    };
+    if (status && !STATUSES.includes(status)) return invalid('status', STATUSES);
+    if (category && !CATEGORIES.includes(category)) return invalid('category', CATEGORIES);
+    if (priority && !PRIORITIES.includes(priority)) return invalid('priority', PRIORITIES);
+
     if (status) updates.status = status;
 
     if (category) {
       updates.category = category;
-      if (category !== ticket.ai_category) {
-        updates.category_overridden = true;
-      }
+      updates.category_overridden = category !== ticket.ai_category;
     }
 
     if (priority) {
       updates.priority = priority;
-      if (priority !== ticket.ai_priority) {
-        updates.priority_overridden = true;
-      }
+      updates.priority_overridden = priority !== ticket.ai_priority;
     }
 
     if (assigned_to !== undefined) {
@@ -252,7 +268,7 @@ export const addMessage = (req: Request, res: Response): void => {
     res.json({
       success: true,
       message: 'Message sent successfully.',
-      data: updated
+      data: updated && user.role === 'author' ? toAuthorView(updated) : updated
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: 'MessageAddError', message: err.message });

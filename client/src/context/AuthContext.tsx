@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
-import { api } from '../services/api';
+import { api, ApiError } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -30,9 +30,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const res = await api.getMe();
         setUser(res.data);
       } catch (err) {
-        console.warn('Session expired or invalid:', err);
-        api.setToken(null);
-        setToken(null);
+        // Only a rejected credential ends the session. A timeout, network failure or 5xx says nothing
+        // about the token, so it is kept for the next attempt; the user simply lands on the login screen.
+        const rejected = err instanceof ApiError && (err.status === 401 || err.status === 403);
+        console.warn(rejected ? 'Session expired or invalid:' : 'Could not restore session:', err);
+        if (rejected) {
+          api.setToken(null);
+          setToken(null);
+        }
         setUser(null);
       } finally {
         setLoading(false);
@@ -43,15 +48,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password = 'password123'): Promise<User> => {
-    setLoading(true);
-    try {
-      const data = await api.login(email, password);
-      setUser(data.user);
-      setToken(data.token);
-      return data.user;
-    } finally {
-      setLoading(false);
-    }
+    // Not toggling the global `loading` flag: it would unmount the login form and wipe its error/email state on failure.
+    const data = await api.login(email, password);
+    setUser(data.user);
+    setToken(data.token);
+    return data.user;
   };
 
   const logout = () => {

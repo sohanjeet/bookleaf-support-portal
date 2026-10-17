@@ -5,12 +5,13 @@ import { useAuth } from '../../context/AuthContext';
 import { useRealtime } from '../../context/RealtimeContext';
 import { StatusBadge } from '../../components/StatusBadge';
 import { PriorityBadge } from '../../components/PriorityBadge';
+import { useFreshItems } from '../../useFreshItems';
 import { AIDraftBox } from '../../components/AIDraftBox';
 import {
   ArrowLeft,
   User as UserIcon,
   BookOpen,
-  Sparkles,
+  WandSparkles,
   Lock,
   MessageSquare,
   Send,
@@ -19,7 +20,8 @@ import {
   Paperclip,
   Tag,
   Shield,
-  Clock
+  Clock,
+  UserCheck
 } from 'lucide-react';
 
 interface Props {
@@ -32,6 +34,8 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
   const { subscribeToTickets } = useRealtime();
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
+  const freshMessages = useFreshItems((ticket?.messages ?? []).map((m, i) => String(m.message_id || i)), ticketId);
+  const freshNotes = useFreshItems((ticket?.internal_notes ?? []).map((n, i) => String(n.note_id || i)), ticketId);
   const [bookDetails, setBookDetails] = useState<Book | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [internalNote, setInternalNote] = useState<string>('');
@@ -41,6 +45,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
 
   const fetchTicket = async () => {
     try {
+      setLoading(true);
       const res = await api.getTicketById(ticketId);
       setTicket(res.data);
       if (res.data.book_id) {
@@ -138,7 +143,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
       setInternalNote('');
       showNotice('Internal note saved.');
     } catch (err: any) {
-      alert(err.message || 'Failed to add note');
+      alert(err.message || 'Failed to add internal note');
     } finally {
       setIsSubmittingNote(false);
     }
@@ -149,10 +154,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
     setTimeout(() => setSuccessMessage(null), 3000);
   };
 
-  if (loading || !ticket) {
-    return <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>Loading ticket details...</div>;
-  }
-
+  const statuses: TicketStatus[] = ['Open', 'In Progress', 'Resolved', 'Closed'];
   const categories: TicketCategory[] = [
     'Royalty & Payments',
     'ISBN & Metadata Issues',
@@ -161,103 +163,193 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
     'Book Status & Production Updates',
     'General Inquiry'
   ];
-
   const priorities: TicketPriority[] = ['Critical', 'High', 'Medium', 'Low'];
-  const statuses: TicketStatus[] = ['Open', 'In Progress', 'Resolved', 'Closed'];
+
+  if (loading && !ticket) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }} role="status">
+        Loading ticket details...
+      </div>
+    );
+  }
+
+  if (!ticket) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center' }}>
+        <p style={{ color: 'var(--accent-rose)' }}>Ticket not found or has been deleted.</p>
+        <button className="btn btn-secondary mt-4" onClick={onBack}>
+          <ArrowLeft size={16} /> Back to Queue
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
-      {/* Top Navigation & Status Notice */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-        <button className="btn btn-secondary btn-sm" onClick={onBack}>
-          <ArrowLeft size={14} />
-          Back to Ticket Queue
+      {/* Navigation & Header */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={onBack}
+          style={{ marginBottom: '0.75rem', gap: '0.4rem', color: 'var(--text-secondary)' }}
+        >
+          <ArrowLeft size={16} />
+          <span>Back to Triage Queue</span>
         </button>
 
-        {successMessage && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#34d399', fontSize: '0.82rem', fontWeight: 600 }}>
-            <CheckCircle size={15} />
-            {successMessage}
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-3 gap-6" style={{ alignItems: 'start' }}>
-        {/* Main 2 Columns: Ticket details, Conversation & AI Draft */}
-        <div style={{ gridColumn: 'span 2' }}>
-          {/* Header Card */}
-          <div className="card mb-4" style={{ padding: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                  <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#94a3b8', fontWeight: 700 }}>
-                    {ticket.ticket_id}
-                  </span>
-                  <StatusBadge status={ticket.status} />
-                  <PriorityBadge priority={ticket.priority} />
-                  <span className="badge badge-category">{ticket.category}</span>
-                </div>
-                <h2 style={{ fontSize: '1.4rem', marginBottom: '0.4rem' }}>{ticket.subject}</h2>
-              </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+              <span
+                style={{
+                  fontFamily: 'var(--font-ui)',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: 'var(--brand-700)',
+                  background: 'var(--brand-50)',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: 'var(--radius-xs)',
+                  border: '1px solid rgba(45, 106, 79, 0.25)'
+                }}
+              >
+                {ticket.ticket_id}
+              </span>
+              <PriorityBadge priority={ticket.priority} />
+              <StatusBadge status={ticket.status} />
+              <span className="badge badge-category">{ticket.category}</span>
             </div>
 
-            <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.82rem', color: '#94a3b8', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
-              <span>Author: <strong style={{ color: '#f8fafc' }}>{ticket.author_name}</strong> ({ticket.author_id})</span>
-              <span>Submitted: <strong style={{ color: '#cbd5e1' }}>{new Date(ticket.created_at).toLocaleString()}</strong></span>
-              <span>Assignee: <strong style={{ color: ticket.assigned_to_name ? '#2dd4bf' : '#fbbf24' }}>{ticket.assigned_to_name || 'Unassigned'}</strong></span>
-            </div>
+            <h1 className="page-title" style={{ fontSize: 'clamp(1.5rem, 1.25rem + 0.7vw, 1.875rem)', margin: 0 }}>
+              {ticket.subject}
+            </h1>
 
             {ticket.attachment_name && (
               <div
                 style={{
-                  marginTop: '0.75rem',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  padding: '0.5rem 0.8rem',
-                  borderRadius: '6px',
+                  marginTop: '0.65rem',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '0.5rem',
-                  fontSize: '0.8rem',
-                  color: '#2dd4bf'
+                  gap: '0.45rem',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-default)',
+                  padding: '0.35rem 0.7rem',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '0.76rem',
+                  color: 'var(--text-secondary)'
                 }}
               >
-                <Paperclip size={14} />
-                <span>Attachment: <strong>{ticket.attachment_name}</strong></span>
+                <Paperclip size={14} className="icon-brand" />
+                <span>
+                  Author Attachment:{' '}
+                  {ticket.attachment_url && ticket.attachment_url.startsWith('/uploads/') ? (
+                    <a href={ticket.attachment_url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>{ticket.attachment_name}</a>
+                  ) : (
+                    <strong style={{ color: 'var(--text-highlight)' }}>{ticket.attachment_name}</strong>
+                  )}
+                </span>
               </div>
             )}
           </div>
 
+          {successMessage && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                background: 'var(--status-resolved-bg)',
+                border: '1px solid var(--status-resolved-border)',
+                color: 'var(--status-resolved-text)',
+                padding: '0.4rem 0.75rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.8rem',
+                fontWeight: 500,
+                animation: 'm-rise var(--dur-base) var(--ease-out) backwards'
+              }}
+            >
+              <CheckCircle size={16} />
+              <span>{successMessage}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main 2-Column Editorial Grid */}
+      <div className="stack-on-tablet" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(300px, 1fr)', gap: '1.5rem', alignItems: 'start' }}>
+        {/* Left Column: Messages Thread, AI Draft, Internal Notes */}
+        <div>
           {/* Conversation History */}
-          <div className="card mb-4">
-            <div className="card-header">
+          <div className="card mb-6" style={{ padding: '1.5rem' }}>
+            <div className="card-header" style={{ marginBottom: '1.25rem' }}>
               <div className="card-title">
-                <MessageSquare size={18} className="text-brand" />
-                Customer Communication Thread ({ticket.messages.length})
+                <MessageSquare size={16} className="icon-brand" />
+                <span>Conversation Timeline</span>
               </div>
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                {ticket.messages.length} {ticket.messages.length === 1 ? 'Message' : 'Messages'} · Live SSE Connected
+              </span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {ticket.messages.map((m, idx) => {
-                const isAdmin = m.sender_role === 'admin';
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {ticket.messages.map((m, i) => {
+                const isAuthor = m.sender_role === 'author';
+                const msgTime = new Date(m.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                const msgDate = new Date(m.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+
                 return (
                   <div
-                    key={m.message_id || idx}
+                    key={m.message_id || i}
+                    className={freshMessages.has(String(m.message_id || i)) ? 'm-enter' : undefined}
                     style={{
-                      background: isAdmin ? 'rgba(15, 23, 42, 0.9)' : 'rgba(20, 184, 166, 0.08)',
-                      border: isAdmin ? '1px solid rgba(56, 189, 248, 0.25)' : '1px solid rgba(20, 184, 166, 0.2)',
-                      borderRadius: '10px',
-                      padding: '1rem'
+                      background: isAuthor ? 'var(--bg-primary)' : '#F2F8F5',
+                      border: isAuthor ? '1px solid var(--border-default)' : '1px solid rgba(45, 106, 79, 0.25)',
+                      borderRadius: 'var(--radius-lg)',
+                      padding: '1.15rem 1.25rem',
+                      boxShadow: 'var(--shadow-xs)',
+                      position: 'relative'
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.85rem', color: isAdmin ? '#38bdf8' : '#2dd4bf' }}>
-                        {isAdmin ? `🛡️ ${m.sender_name} (BookLeaf Ops)` : `👤 ${m.sender_name} (Author)`}
-                      </span>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                        {new Date(m.created_at).toLocaleString()}
-                      </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: '50%',
+                            background: isAuthor ? 'var(--bg-secondary)' : 'var(--brand-600)',
+                            color: isAuthor ? 'var(--text-primary)' : 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.65rem',
+                            fontWeight: 600
+                          }}
+                        >
+                          {m.sender_name ? m.sender_name[0].toUpperCase() : 'U'}
+                        </div>
+                        <strong style={{ fontSize: '0.84rem', color: 'var(--text-highlight)' }}>
+                          {m.sender_name}
+                        </strong>
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            padding: '1px 6px',
+                            borderRadius: 'var(--radius-full)',
+                            background: isAuthor ? 'var(--bg-secondary)' : 'rgba(45, 106, 79, 0.12)',
+                            color: isAuthor ? 'var(--text-secondary)' : 'var(--brand-700)',
+                            fontWeight: 600
+                          }}
+                        >
+                          {isAuthor ? 'Author' : 'Operations Desk'}
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                        {msgDate} at {msgTime}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.9rem', color: '#f8fafc', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+
+                    <div style={{ fontSize: '0.88rem', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>
                       {m.message}
                     </div>
                   </div>
@@ -276,60 +368,67 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
           <div
             className="card"
             style={{
-              background: 'rgba(30, 27, 75, 0.3)',
-              border: '1px solid rgba(139, 92, 246, 0.3)'
+              background: '#FFFDF9',
+              border: '1px solid #EFE8DC',
+              padding: '1.25rem'
             }}
           >
-            <div className="card-header">
-              <div className="card-title" style={{ color: '#c084fc' }}>
+            <div className="card-header" style={{ borderBottomColor: '#EFE8DC' }}>
+              <div className="card-title" style={{ color: '#92400E' }}>
                 <Lock size={16} />
-                Internal Team Notes (Strictly Confidential — Hidden from Author)
+                <span>Internal Team Notes</span>
               </div>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Confidential — Hidden from Author</span>
             </div>
 
             {ticket.internal_notes.length === 0 ? (
-              <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0 0 1rem' }}>
-                No internal notes yet. Use this section to log team investigations, Finance checks, or printer escalations.
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', margin: '0 0 1rem' }}>
+                No internal notes yet. Log team investigations, Finance checks, or printer escalations here.
               </p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '1rem' }}>
                 {ticket.internal_notes.map((note, i) => (
                   <div
                     key={note.note_id || i}
+                    className={freshNotes.has(String(note.note_id || i)) ? 'm-enter' : undefined}
                     style={{
-                      background: 'rgba(15, 23, 42, 0.8)',
-                      border: '1px solid rgba(139, 92, 246, 0.2)',
-                      borderRadius: '8px',
-                      padding: '0.75rem 1rem'
+                      background: '#FFFFFF',
+                      border: '1px solid #EFE8DC',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '0.75rem 0.95rem'
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#c084fc', marginBottom: '0.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.73rem', color: '#92400E', marginBottom: '0.2rem' }}>
                       <strong>{note.admin_name}</strong>
-                      <span style={{ color: '#64748b' }}>{new Date(note.created_at).toLocaleString()}</span>
+                      <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                        {new Date(note.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>{note.note}</div>
+                    <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.55 }}>{note.note}</div>
                   </div>
                 ))}
               </div>
             )}
 
             <form onSubmit={handleAddInternalNote}>
-              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+              <div className="form-group" style={{ marginBottom: '0.65rem' }}>
                 <textarea
-                  className="form-textarea"
+                  className="form-control"
                   rows={2}
-                  placeholder="Add private note for the operations team (e.g., 'Checked with Repro Delhi warehouse, reprint queued')..."
+                  placeholder="Add private note for operations team..."
                   value={internalNote}
                   onChange={e => setInternalNote(e.target.value)}
+                  style={{ background: '#FFFFFF', borderColor: '#EFE8DC', fontSize: '0.82rem' }}
                 />
               </div>
               <button
                 type="submit"
                 className="btn btn-secondary btn-sm"
                 disabled={isSubmittingNote || !internalNote.trim()}
+                style={{ gap: '0.35rem' }}
               >
-                <Lock size={13} />
-                {isSubmittingNote ? 'Saving Note...' : 'Add Private Note'}
+                <Lock size={12} />
+                <span>{isSubmittingNote ? 'Saving...' : 'Add Private Note'}</span>
               </button>
             </form>
           </div>
@@ -338,12 +437,23 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
         {/* Right Column: AI Triage Panel, Overrides, & Author/Book Context */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {/* AI Intelligence & Overrides Panel */}
-          <div className="card" style={{ border: '1px solid rgba(56, 189, 248, 0.35)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-              <div className="brand-icon-box" style={{ width: 28, height: 28, background: 'linear-gradient(135deg, #0284c7, #38bdf8)' }}>
-                <Sparkles size={15} />
+          <div className="card" style={{ padding: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.15rem' }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--brand-600)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white'
+                }}
+              >
+                <WandSparkles size={16} />
               </div>
-              <h4 style={{ margin: 0, fontSize: '1rem' }}>AI Triage & Overrides</h4>
+              <h4 style={{ margin: 0, fontSize: '0.92rem' }}>AI Triage & Overrides</h4>
             </div>
 
             {/* Status Switcher */}
@@ -364,13 +474,13 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
             {/* AI Auto-Classification & Override */}
             <div className="form-group">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                <label className="form-label" style={{ margin: 0 }}>Category Classification</label>
+                <label className="form-label" style={{ margin: 0 }}>Category</label>
                 {ticket.category_overridden ? (
-                  <span className="badge" style={{ fontSize: '0.68rem', color: '#fb923c', background: 'rgba(251, 146, 60, 0.15)' }}>
-                    Admin Overridden
+                  <span className="badge" style={{ fontSize: '0.65rem', color: 'var(--priority-high-text)', background: 'var(--priority-high-bg)', borderColor: 'var(--priority-high-border)' }}>
+                    Overridden
                   </span>
                 ) : (
-                  <span className="badge badge-ai" style={{ fontSize: '0.68rem' }}>
+                  <span className="badge badge-ai">
                     AI Classified
                   </span>
                 )}
@@ -390,13 +500,13 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
             {/* AI Priority Scoring & Override */}
             <div className="form-group">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                <label className="form-label" style={{ margin: 0 }}>Priority Score</label>
+                <label className="form-label" style={{ margin: 0 }}>Priority</label>
                 {ticket.priority_overridden ? (
-                  <span className="badge" style={{ fontSize: '0.68rem', color: '#fb923c', background: 'rgba(251, 146, 60, 0.15)' }}>
-                    Admin Overridden
+                  <span className="badge" style={{ fontSize: '0.65rem', color: 'var(--priority-high-text)', background: 'var(--priority-high-bg)', borderColor: 'var(--priority-high-border)' }}>
+                    Overridden
                   </span>
                 ) : (
-                  <span className="badge badge-ai" style={{ fontSize: '0.68rem' }}>
+                  <span className="badge badge-ai">
                     AI Scored
                   </span>
                 )}
@@ -411,88 +521,100 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
-              {ticket.ai_priority_reasoning && (
-                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.35rem', fontStyle: 'italic' }}>
-                  AI Reasoning: "{ticket.ai_priority_reasoning}"
-                </div>
-              )}
             </div>
 
-            {/* Ticket Assignment */}
+            {/* Assignee */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Assigned Specialist</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={ticket.assigned_to_name || 'Unassigned'}
-                  readOnly
-                  style={{ fontSize: '0.85rem' }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleAssignToMe}
-                  disabled={isUpdatingMeta || ticket.assigned_to === user?.id}
-                >
-                  Assign to Me
-                </button>
+              <label className="form-label">Assignee</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {ticket.assigned_to_name || 'Unassigned'}
+                </span>
+                {(!ticket.assigned_to || ticket.assigned_to !== user?.id) && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleAssignToMe}
+                    disabled={isUpdatingMeta}
+                    style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+                  >
+                    <UserCheck size={16} />
+                    Assign to Me
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Book Context Card (If linked) */}
+          {/* Author Details Card */}
+          <div className="card" style={{ padding: '1.25rem' }}>
+            <div className="card-header">
+              <div className="card-title">
+                <UserIcon size={16} className="icon-brand" />
+                <span>Author Profile</span>
+              </div>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+                {ticket.author_id}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.82rem' }}>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Author Name</div>
+                <strong style={{ color: 'var(--text-highlight)' }}>{ticket.author_name}</strong>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Email</div>
+                <div style={{ color: 'var(--text-secondary)' }}>{ticket.author_email}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Linked Book Details */}
           {bookDetails && (
-            <div className="card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <BookOpen size={16} className="text-brand" />
-                <h4 style={{ margin: 0, fontSize: '0.95rem' }}>Linked Book Record</h4>
+            <div className="card" style={{ padding: '1.25rem' }}>
+              <div className="card-header">
+                <div className="card-title">
+                  <BookOpen size={16} className="icon-brand" />
+                  <span>Linked Manuscript</span>
+                </div>
+                <span className="badge badge-resolved" style={{ fontSize: '0.65rem' }}>
+                  {bookDetails.status}
+                </span>
               </div>
 
-              <div style={{ fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <div>
-                  <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>{bookDetails.title}</strong>
-                  <div style={{ color: '#94a3b8', fontFamily: 'monospace' }}>ISBN: {bookDetails.isbn}</div>
+              <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 60,
+                    borderRadius: 3,
+                    background: 'var(--brand-800)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    flexShrink: 0,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+                  }}
+                >
+                  📖
                 </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.4rem' }}>
-                  <span style={{ color: '#94a3b8' }}>Status:</span>
-                  <strong>{bookDetails.status}</strong>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Copies Sold:</span>
-                  <strong>{bookDetails.total_copies_sold.toLocaleString('en-IN')}</strong>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Royalty Pending:</span>
-                  <strong style={{ color: '#fbbf24' }}>₹{bookDetails.royalty_pending.toLocaleString('en-IN')}</strong>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Print Partner:</span>
-                  <span>{bookDetails.print_partner || 'In-House'}</span>
+                <div style={{ minWidth: 0, fontSize: '0.82rem' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-highlight)', marginBottom: '0.2rem' }}>
+                    {bookDetails.title}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    ISBN: {bookDetails.isbn}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                    {bookDetails.total_copies_sold} copies sold · MRP ₹{bookDetails.mrp || '—'}
+                  </div>
                 </div>
               </div>
             </div>
           )}
-
-          {/* Author Profile Quick Reference */}
-          <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              <UserIcon size={16} className="text-brand" />
-              <h4 style={{ margin: 0, fontSize: '0.95rem' }}>Author Overview</h4>
-            </div>
-
-            <div style={{ fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <div>
-                <strong style={{ color: '#f8fafc' }}>{ticket.author_name}</strong>
-                <div style={{ color: '#94a3b8' }}>{ticket.author_email}</div>
-              </div>
-              <div style={{ color: '#64748b' }}>Author ID: {ticket.author_id}</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

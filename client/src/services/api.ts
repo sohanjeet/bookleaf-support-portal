@@ -2,6 +2,19 @@ import { User, Book, Ticket, TicketStatus, TicketCategory, TicketPriority } from
 
 const API_BASE = '/api';
 
+/** Carries the HTTP status (when there was a response) so callers can tell auth failures from outages. */
+export class ApiError extends Error {
+  constructor(message: string, public status?: number, public timedOut = false) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+// Session restore must settle shortly after the loader's "Still connecting…" notice (8s).
+const ME_TIMEOUT_MS = 10000;
+
+type RequestOptions = RequestInit & { timeoutMs?: number };
+
 class ApiService {
   private token: string | null = null;
 
@@ -22,7 +35,8 @@ class ApiService {
     return this.token || localStorage.getItem('bookleaf_token');
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+    const { timeoutMs, ...init } = options;
     const url = `${API_BASE}${endpoint}`;
     const headers = new Headers(options.headers || {});
 
@@ -35,16 +49,29 @@ class ApiService {
       headers.set('Content-Type', 'application/json');
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers
-    });
-
-    const data = await response.json().catch(() => ({}));
+    // Optional bounded wait (used for session restore) so a hung server cannot block the app forever.
+    const controller = timeoutMs ? new AbortController() : null;
+    const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : 0;
+    let response: Response;
+    let data: any;
+    try {
+      response = await fetch(url, { ...init, headers, signal: controller?.signal ?? init.signal });
+      data = await response.json().catch(() => ({}));
+    } catch (err) {
+      if (controller?.signal.aborted) throw new ApiError('The server took too long to respond.', undefined, true);
+      throw err;
+    } finally {
+      if (timer) window.clearTimeout(timer);
+    }
 
     if (!response.ok) {
+      // Expired/invalid session on a protected call: drop the token and return to the login screen
+      if (endpoint !== '/auth/login' && (response.status === 401 || data.error === 'InvalidToken')) {
+        this.setToken(null);
+        window.location.reload();
+      }
       const errorMsg = data.message || `Request failed with status ${response.status}`;
-      throw new Error(errorMsg);
+      throw new ApiError(errorMsg, response.status);
     }
 
     return data;
@@ -61,7 +88,7 @@ class ApiService {
   }
 
   public async getMe() {
-    return this.request<{ success: boolean; data: User }>('/auth/me');
+    return this.request<{ success: boolean; data: User }>('/auth/me', { timeoutMs: ME_TIMEOUT_MS });
   }
 
   public async getDemoAccounts() {
