@@ -1,0 +1,110 @@
+{
+  "company_overview": {
+    "name": "BookLeaf Publishing",
+    "description": "BookLeaf Publishing is a premier self-publishing company operating in India and the US, processing 1,200+ books monthly across a catalog of 22,000+ titles.",
+    "packages": [
+      {
+        "name": "Standard Free",
+        "details": "No upfront cost; standard publishing and distribution."
+      },
+      {
+        "name": "Bestseller Breakthrough",
+        "details": "Premium, paid package with specialized marketing and expanded distribution add-ons."
+      }
+    ],
+    "services_handled": ["Cover design", "Typesetting", "ISBN assignment", "Printing", "Distribution", "Royalty management"],
+    "facilities": "In-house printing facility and warehouse located in Delhi.",
+    "print_partners": ["Repro India", "Epitome Books", "In-House Delhi"]
+  },
+  "royalty_policy": {
+    "split": "80/20 split: 80% of net profit goes to author, 20% to BookLeaf.",
+    "net_profit_formula": "Net profit = MRP minus printing cost, platform commission (Amazon/Flipkart), and shipping charges.",
+    "cycle": "Royalties are calculated quarterly and paid within 45 days of the quarter ending.",
+    "minimum_payout": "₹1,000 threshold. If accumulated royalties are below ₹1,000, they roll over to the next quarter.",
+    "payout_method": "Direct bank transfer to the account linked in the author's dashboard.",
+    "transparency": "Authors can view a detailed royalty breakdown in their dashboard, showing sales figures per platform."
+  },
+  "isbn_policy": {
+    "assignment": "Every book published through BookLeaf receives a unique ISBN assigned by BookLeaf under BookLeaf's publisher imprint.",
+    "custom_imprint": "If an author wants an ISBN under their own imprint, they must obtain it independently.",
+    "errors": "If an author reports an ISBN error (duplicate, wrong book linked), it is treated as a high-priority issue and escalated to the production team immediately with a 48-hour resolution timeline."
+  },
+  "printing_and_quality": {
+    "fulfillment": "In-house printing handles most orders; overflow or specific format requirements go to Repro India or Epitome Books.",
+    "turnaround": "Standard print turnaround: 5–7 business days from order confirmation.",
+    "quality_defect_policy": "If an author reports a quality issue (misprints, binding defects, color inconsistency), BookLeaf arranges a free reprint after verification. The author may need to share photos of the defective copy. Reprints take 5–7 business days."
+  },
+  "distribution_and_availability": {
+    "platforms": ["Amazon India", "Flipkart", "Amazon US", "Amazon UK", "BookLeaf Store"],
+    "listing_turnaround": "New listings typically go live within 7–10 business days after publication is complete.",
+    "stock_sync_issue": "If a book is showing as 'Currently Unavailable' on a platform, it usually indicates a stock sync issue. BookLeaf's team can trigger a re-sync within 24–48 hours for it to go live again."
+  },
+  "production_stages": {
+    "flow": [
+      "Manuscript Received",
+      "Editing (if opted)",
+      "Cover Design",
+      "Typesetting",
+      "Proofreading",
+      "ISBN Assignment",
+      "Printing",
+      "Distribution Setup",
+      "Published & Live"
+    ],
+    "updates": "Authors are updated at each stage via email.",
+    "common_delay_bottlenecks": "Cover Design (waiting for author approval) and Proofreading (revision rounds)."
+  },
+  "communication_tone_guidelines": [
+    "Always empathetic and professional. Authors are our partners, not customers to be managed.",
+    "Acknowledge the author's concern before jumping to solutions.",
+    "Be specific: include actual numbers, dates, and statuses wherever possible rather than vague reassurances.",
+    "If something is BookLeaf's fault (delayed royalties, ISBN error), own it directly. No corporate deflection.",
+    "If the issue requires escalation or investigation, give a clear timeline ('Our team will look into this and get back to you within 48 hours') rather than open-ended promises.",
+    "Always end with a clear next step for the author and/or the BookLeaf team."
+  ],
+  "categories": [
+    "Royalty & Payments",
+    "ISBN & Metadata Issues",
+    "Printing & Quality",
+    "Distribution & Availability",
+    "Book Status & Production Updates",
+    "General Inquiry"
+  ],
+  "sample_calibrations": [
+    {
+      "category": "Royalty & Payments",
+      "sample_query": "I published my book 4 months ago and still haven’t received any royalty. What’s going on?",
+      "expected_guidance": "Acknowledge the frustration. Explain the quarterly royalty cycle and 45-day payout window. Check if bank details are linked. Provide specific next payout date. If genuinely overdue, escalate with a 48-hour resolution timeline."
+    },
+    {
+      "category": "Royalty & Payments",
+      "sample_query": "My royalty amount seems too low. I sold 200 copies but only received ₹3,000.",
+      "expected_guidance": "Explain net profit calculation: MRP minus printing, platform commission, and shipping. Offer to share a detailed line-by-line royalty breakdown. Don't be defensive—offer transparency."
+    },
+    {
+      "category": "ISBN & Metadata Issues",
+      "sample_query": "My book is showing a different ISBN on Amazon than what’s on the physical copy.",
+      "expected_guidance": "Treat as high priority. Acknowledge this is a serious data issue. Confirm escalating to the production team immediately with a 48-hour resolution timeline."
+    },
+    {
+      "category": "Printing & Quality",
+      "sample_query": "I received my author copies and the print quality is terrible. The images are blurry and pages are misaligned.",
+      "expected_guidance": "Apologize sincerely. Ask the author to share photos of defective copies. Confirm BookLeaf will arrange a free reprint once verified. Provide 5–7 business days timeline for reprint."
+    },
+    {
+      "category": "Distribution & Availability",
+      "sample_query": "My book is published but it’s showing as 'Currently Unavailable' on Amazon.",
+      "expected_guidance": "Explain stock sync issue. Confirm triggering a re-sync with distribution team. Set expectation: 24–48 hours for it to go live again."
+    },
+    {
+      "category": "Book Status & Production Updates",
+      "sample_query": "It’s been 3 weeks and my book is still in typesetting. When will it be done?",
+      "expected_guidance": "Check actual production status. If delayed, be honest why. Provide specific updated timeline. Don't blame author even if delay is on their side—frame collaboratively."
+    },
+    {
+      "category": "General Inquiry",
+      "sample_query": "Can I update the description of my book on Amazon after it’s already live?",
+      "expected_guidance": "Yes, metadata updates can be submitted through dashboard or by emailing BookLeaf team. Changes typically reflect on platforms within 3–5 business days."
+    }
+  ]
+}

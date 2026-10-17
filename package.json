@@ -1,0 +1,23 @@
+{
+  "name": "bookleaf-author-support-portal",
+  "version": "1.0.0",
+  "description": "BookLeaf Publishing - Author Support & Communication Portal with AI-assisted response generation",
+  "private": true,
+  "scripts": {
+    "setup": "npm --prefix server install && npm --prefix client install",
+    "dev": "node run-dev.js",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build && npm --prefix server run build",
+    "start": "npm --prefix server start",
+    "seed": "npm --prefix server run seed"
+  },
+  "keywords": [
+    "bookleaf",
+    "author-support",
+    "ai-response-generation",
+    "full-stack"
+  ],
+  "author": "Full Stack Developer Candidate",
+  "license": "ISC"
+}
