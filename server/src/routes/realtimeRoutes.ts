@@ -2,9 +2,9 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { sseService } from '../services/sseService.js';
 import { AuthUserPayload } from '../middleware/auth.js';
+import { JWT_SECRET } from '../config.js';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'bookleaf_super_secret_jwt_key_2026_dev';
 
 router.get('/stream', (req: Request, res: Response): void => {
   const token = (req.query.token as string) || (req.headers.authorization?.split(' ')[1]);

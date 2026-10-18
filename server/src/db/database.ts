@@ -10,7 +10,10 @@ interface DatabaseSchema {
   last_seeded?: string;
 }
 
-const DB_FILE_PATH = path.resolve(process.cwd(), 'src/data/db_store.json');
+// BOOKLEAF_DB_FILE overrides the data file location (used to test seeding in isolation).
+export const DB_FILE_PATH = process.env.BOOKLEAF_DB_FILE
+  ? path.resolve(process.env.BOOKLEAF_DB_FILE)
+  : path.resolve(process.cwd(), 'src/data/db_store.json');
 
 class Database {
   private data: DatabaseSchema = {
@@ -19,12 +22,15 @@ class Database {
     tickets: []
   };
   private isLoaded = false;
+  /** True when this process created the data file (first run or corrupt-file recovery). */
+  public createdOnInit = false;
 
   constructor() {
     this.init();
   }
 
   private init() {
+    this.createdOnInit = !fs.existsSync(DB_FILE_PATH);
     try {
       if (fs.existsSync(DB_FILE_PATH)) {
         const raw = fs.readFileSync(DB_FILE_PATH, 'utf-8');
@@ -35,6 +41,11 @@ class Database {
       }
     } catch (err) {
       console.error('Error loading database file, re-seeding:', err);
+      try {
+        fs.copyFileSync(DB_FILE_PATH, `${DB_FILE_PATH}.corrupt-${Date.now()}`);
+      } catch {
+        // nothing to back up
+      }
       this.seedInitialData();
     }
   }

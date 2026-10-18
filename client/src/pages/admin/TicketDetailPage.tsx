@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Ticket, TicketStatus, TicketCategory, TicketPriority, Book } from '../../types';
-import { api } from '../../services/api';
+import { api, openAttachment } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtime } from '../../context/RealtimeContext';
 import { StatusBadge } from '../../components/StatusBadge';
@@ -242,7 +242,11 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
                 <span>
                   Author Attachment:{' '}
                   {ticket.attachment_url && ticket.attachment_url.startsWith('/uploads/') ? (
-                    <a href={ticket.attachment_url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>{ticket.attachment_name}</a>
+                    <a
+                      href={ticket.attachment_url}
+                      onClick={(e) => { e.preventDefault(); openAttachment(ticket.attachment_url!).catch(() => window.alert('Attachment could not be opened.')); }}
+                      style={{ fontWeight: 600 }}
+                    >{ticket.attachment_name}</a>
                   ) : (
                     <strong style={{ color: 'var(--text-highlight)' }}>{ticket.attachment_name}</strong>
                   )}

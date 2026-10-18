@@ -1,15 +1,14 @@
+import './config.js'; // must stay first: loads .env and validates JWT_SECRET
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
 import authRoutes from './routes/authRoutes.js';
 import bookRoutes from './routes/bookRoutes.js';
 import ticketRoutes from './routes/ticketRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import realtimeRoutes from './routes/realtimeRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
+import { aiService } from './services/aiService.js';
 import { errorHandler } from './middleware/errorHandler.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -27,9 +26,8 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve uploaded attachments statically
-const uploadsPath = path.resolve(process.cwd(), 'uploads');
-app.use('/uploads', express.static(uploadsPath));
+// Attachments: authenticated, ownership-checked (not served statically)
+app.use('/uploads', uploadRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
@@ -38,7 +36,7 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     service: 'BookLeaf Author Support & Communication API',
     version: '1.0.0',
-    ai_status: process.env.OPENAI_API_KEY ? 'OpenAI GPT-4o-mini configured' : 'Built-in BookLeaf Knowledge-Base AI active'
+    ai_status: aiService.isOpenAIConfigured() ? 'OpenAI GPT-4o-mini configured' : 'Built-in BookLeaf Knowledge-Base AI active'
   });
 });
 
@@ -103,7 +101,7 @@ app.listen(PORT, () => {
   console.log(` Status: Running on http://localhost:${PORT}`);
   console.log(` Health Check: http://localhost:${PORT}/api/health`);
   console.log(` API Spec:     http://localhost:${PORT}/api/docs`);
-  console.log(` AI Provider:  ${process.env.OPENAI_API_KEY ? 'OpenAI GPT-4o-mini' : 'BookLeaf Knowledge-Base Local Engine'}`);
+  console.log(` AI Provider:  ${aiService.isOpenAIConfigured() ? 'OpenAI GPT-4o-mini' : 'BookLeaf Knowledge-Base Local Engine'}`);
   console.log('====================================================');
 });
 

@@ -94,7 +94,7 @@ AI is implemented in [server/src/services/aiService.ts](server/src/services/aiSe
 Things to know:
 
 - **Only OpenAI is wired up.** `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` and `AI_PROVIDER` appear in `.env.example` but are not used by the code.
-- **The OpenAI key must be present in the shell environment, not only in `server/.env`.** `dotenv.config()` runs after the AI service module has read `process.env`, so a key that exists only in `server/.env` is not picked up (verified). See [Environment variables](#environment-variables).
+- **The OpenAI key is read from `server/.env`** (loaded before any module reads the environment). `/api/health` and the start-up banner report OpenAI only when the AI service actually loaded a key. See [Environment variables](#environment-variables).
 - Model output for category/priority is parsed from JSON but not validated against the allowed values before it is stored; admins can correct it with the override controls.
 - The policy snippets used in prompts are written into `aiService.ts`; `knowledge_base.json` is what the Knowledge Base page and `GET /api/ai/knowledge-base` display. The two should be kept in sync if policies change.
 - Token usage returned by OpenAI is captured in the service result but is not persisted or logged.
@@ -225,7 +225,7 @@ cd ../client && npm install
 
 ### Environment variables
 
-Copy the example file (it is safe to run without changes):
+Copy the example file, then **set `JWT_SECRET`** (the server will not start without it):
 
 ```bash
 cp server/.env.example server/.env      # Windows PowerShell: Copy-Item server\.env.example server\.env
@@ -234,7 +234,7 @@ cp server/.env.example server/.env      # Windows PowerShell: Copy-Item server\.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `PORT` | No | API port. Default `5000`. The Vite proxy targets `http://localhost:5000`, so keep the default unless you also change `client/vite.config.ts`. |
-| `JWT_SECRET` | No (set for any non-local use) | Secret used to sign JWTs. Falls back to a built-in development default. |
+| `JWT_SECRET` | **Yes** | Secret used to sign and verify JWTs. Min 32 characters; startup fails if it is missing, too short or a known placeholder. There is no built-in fallback. |
 | `NODE_ENV` | No | Listed in `.env.example`; not read by the code. |
 | `OPENAI_API_KEY` | No | Enables live OpenAI calls. Without it the fallback engine is used. |
 | `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `AI_PROVIDER` | No | Listed in `.env.example` but **not used** by the code. |
@@ -245,16 +245,15 @@ Placeholder for local use only; never commit a real key:
 OPENAI_API_KEY=your_api_key_here
 ```
 
-**Known quirk:** because `dotenv` loads after the AI service reads its key, set the key in the shell that starts the server instead of (or as well as) `server/.env`:
+Generate a development secret (any local value of 32+ characters works; never commit it):
 
 ```bash
-# bash
-OPENAI_API_KEY=your_api_key_here npm run dev
-# PowerShell
-$env:OPENAI_API_KEY = "your_api_key_here"; npm run dev
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-The same load order applies to `JWT_SECRET`, so a value that exists only in `server/.env` is not applied either (the default is used). This is harmless locally because the `.env.example` value equals the built-in default.
+Paste the output after `JWT_SECRET=` in `server/.env`. Existing tokens become invalid when the secret changes, so log in again.
+
+`server/.env` is loaded first thing at start-up, so `OPENAI_API_KEY` and `JWT_SECRET` set there are picked up. Variables already set in the shell take precedence over the file.
 
 ### Running the application
 
@@ -322,7 +321,7 @@ The app also includes an **"Evaluation mode"** bar that switches between the adm
 - Seeding is **automatic on first start**: if `server/src/data/db_store.json` does not exist, the server builds it from the sample data (one admin, 10 author users, 18 books, 3 example tickets).
 - If `db_store.json` already exists it is loaded as-is. The file is committed in this repository and is updated at runtime, so it also contains any tickets created during local use.
 - **To reset to a clean seed**: stop the server, delete `server/src/data/db_store.json`, start the server again.
-- The `seed` npm scripts (`npm run seed`, root and server) point to `src/data/seed.ts`, which does not exist in the repository, so they do not work. Use the reset procedure above.
+- **Seeding** is automatic when `db_store.json` is missing (first start). `npm run seed` (root or `server/`) seeds manually: it creates the file if missing and otherwise leaves existing data untouched. `npm run seed -- --force` backs up the existing file (`db_store.json.bak-<timestamp>`) and reseeds. Set `BOOKLEAF_DB_FILE=<path>` to seed/run against a different data file (e.g. for testing).
 
 ---
 
@@ -353,7 +352,7 @@ All routes are under `/api`. "Auth" means `Authorization: Bearer <token>`. A mac
 | GET | `/realtime/stream?token=<jwt>` | Auth | SSE stream |
 | **Other** | | | |
 | GET | `/health`, `/docs` | Public | Health check, endpoint summary |
-| GET | `/uploads/<file>` | Public | Static uploaded attachments |
+| GET | `/uploads/<file>` | Auth | Attachment; admins any ticket's, authors only their own tickets' (others get 404) |
 
 ---
 
@@ -416,7 +415,7 @@ Manual checks used during development: the author/admin flows in the browser, pl
 - **SSE over WebSockets**: traffic is one-directional; see [section 13](#13-realtime-updates).
 - **AI is assistive, not autonomous.** It classifies, scores and drafts; a human decides what is sent. Failures degrade to a rule engine rather than blocking ticket creation.
 - **Cost control**: one call per new ticket, one per regeneration, `gpt-4o-mini`, keyword-selected snippets instead of the full Knowledge Base, bounded output on regeneration.
-- **Attachments are stored locally** (`server/uploads/`, git-ignored). The ticket stores the file path and original name; admins see a link on the ticket detail page. Authors' ticket views do not render the attachment.
+- **Attachments are stored locally** (`server/uploads/`, git-ignored). The ticket stores the file path and original name; admins see a link on the ticket detail page (opened with the session token, since `/uploads` requires authentication). Authors' ticket views do not render the attachment.
 - **Demo-oriented authentication**: one shared demo password, an unauthenticated demo-accounts endpoint and a one-click switcher, all to make review quick.
 - **Local-only deployment**: there is no Dockerfile, hosting configuration or CI in the repository.
 
@@ -426,11 +425,9 @@ Manual checks used during development: the author/admin flows in the browser, pl
 
 - Single-process JSON storage: whole-file synchronous writes on every change, no transactions, not suitable for concurrent multi-instance use. The data file is tracked in git and changes as the app is used.
 - SSE connections are held in process memory, so realtime works for a single server instance only; no replay of missed events.
-- `.env` loading order means `OPENAI_API_KEY` / `JWT_SECRET` should be provided via the shell environment (see [Environment variables](#environment-variables)). The `/api/health` and start-up banner report OpenAI as active whenever the variable is set at request time, which can differ from what the AI service actually read.
-- `npm run seed` is broken (missing `seed.ts`); reset by deleting `db_store.json`.
 - Only OpenAI is integrated; unused provider variables remain in `.env.example`. Model category/priority output is not validated before storing.
-- Uploaded files are served from `/uploads/<random-name>` without authentication (names are not guessable but are not access-controlled) and are not virus-scanned. Allowed types are PNG, JPG and PDF, max 10 MB.
-- Authentication is demo-grade: shared password, token in `localStorage`, no revocation or rate limiting, permissive CORS (`origin: true`), SSE token in the query string, development-default JWT secret fallback.
+- Uploaded files are served only to authenticated users with access to the owning ticket, but are not virus-scanned. Allowed types are PNG, JPG and PDF, max 10 MB.
+- Authentication is demo-grade: shared password, token in `localStorage`, no revocation or rate limiting, permissive CORS (`origin: true`), SSE token in the query string.
 - Assignment is "assign to me" only; there is no assignee picker or multi-admin directory.
 - No automated tests.
 - Ticket ids are random four-digit numbers (`TCK-NNNN`) without a uniqueness check.
@@ -462,4 +459,4 @@ AI-assisted development tools (Claude Code) were used for implementation support
 - **Repository status**: no remote is configured in the local clone; add the public repository URL before submitting. Local working-tree changes may be uncommitted.
 - **How to run**: `npm run setup`, then `npm run dev`; open http://localhost:5173 and sign in as `admin@bookleafpub.com` or `priya.sharma@email.com` with `password123`. No API key is required.
 - **Assumptions and trade-offs**: [section 16](#16-assumptions--trade-offs); limitations in [section 17](#17-known-limitations); the longer write-up is [WRITEUP.md](WRITEUP.md).
-- **For reviewers**: to see live OpenAI output, start the server with `OPENAI_API_KEY` set in the shell (see [Environment variables](#environment-variables)); otherwise the labelled fallback engine produces the classification and drafts. To reset the data, delete `server/src/data/db_store.json` and restart.
+- **For reviewers**: to see live OpenAI output, set `OPENAI_API_KEY` in `server/.env` (see [Environment variables](#environment-variables)); otherwise the labelled fallback engine produces the classification and drafts. To reset the data, delete `server/src/data/db_store.json` and restart (or run `npm run seed -- --force`).

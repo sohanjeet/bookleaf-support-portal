@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserRole } from '../types/index.js';
+import { JWT_SECRET } from '../config.js';
 
 export interface AuthUserPayload {
   userId: string;
@@ -18,7 +19,6 @@ declare global {
   }
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'bookleaf_super_secret_jwt_key_2026_dev';
 
 export const authenticateJWT = (req: Request, res: Response, next: NextFunction): void => {
   const authHeader = req.headers.authorization;

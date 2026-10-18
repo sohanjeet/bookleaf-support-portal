@@ -1,3 +1,4 @@
+import '../config.js'; // ensure .env is loaded before the keys below are read
 import fs from 'fs';
 import path from 'path';
 import { TicketCategory, TicketPriority, AIClassificationResult, Book } from '../types/index.js';
@@ -28,9 +29,14 @@ try {
 }
 
 export class AIService {
-  private openaiApiKey = process.env.OPENAI_API_KEY || '';
+  private openaiApiKey = (process.env.OPENAI_API_KEY || '').trim();
   private anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
   private geminiApiKey = process.env.GEMINI_API_KEY || '';
+
+  /** True only when a live OpenAI key was actually loaded (never exposes the key itself). */
+  public isOpenAIConfigured(): boolean {
+    return this.openaiApiKey.length > 0;
+  }
 
   /**
    * Cost-Aware context selector: retrieves only the relevant portion of the Knowledge Base

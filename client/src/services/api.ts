@@ -168,3 +168,19 @@ class ApiService {
 }
 
 export const api = new ApiService();
+
+/** Attachments require the Bearer token, which a plain link cannot send: fetch as a blob and open it. */
+export async function openAttachment(url: string): Promise<void> {
+  const token = localStorage.getItem('bookleaf_token');
+  const win = window.open('', '_blank');
+  try {
+    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new ApiError('Attachment could not be opened.', res.status);
+    const blobUrl = URL.createObjectURL(await res.blob());
+    if (win) win.location.href = blobUrl;
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (err) {
+    win?.close();
+    throw err;
+  }
+}

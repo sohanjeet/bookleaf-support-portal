@@ -2,8 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db } from '../db/database.js';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'bookleaf_super_secret_jwt_key_2026_dev';
+import { JWT_SECRET } from '../config.js';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {

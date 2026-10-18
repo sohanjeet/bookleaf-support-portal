@@ -24,7 +24,9 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
+    // Extension comes from the validated MIME type, never from the client-supplied filename.
+    const ext = file.mimetype === 'application/pdf' ? '.pdf' : file.mimetype === 'image/png' ? '.png' : '.jpg';
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
     cb(null, unique);
   }
 });
