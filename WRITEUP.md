@@ -24,7 +24,7 @@ To achieve this, I prioritised:
 - **File-Backed Persisted Store vs. External Postgres/Docker Setup:**  
   *Decision:* To ensure an effortless local setup for technical reviewers, I designed a thread-safe, file-backed ACID store seeded with all sample records rather than requiring reviewers to provision a local PostgreSQL or MongoDB instance. The data access layer is cleanly abstracted behind a repository interface (`Database`), making migration to Prisma/PostgreSQL straightforward.
 - **Dual AI Engine (LLM + Knowledge-Base Fallback) vs. LLM-Only:**  
-  *Decision:* External AI APIs can experience rate limits, network outages, or missing keys. I designed a dual-engine architecture: if an OpenAI key is configured, it leverages `gpt-4o-mini`; if unconfigured or down, it gracefully degrades to the internal BookLeaf Knowledge-Base Heuristic Engine. This guarantees zero 500 errors and reliable classification under all conditions.
+  *Decision:* External AI APIs can experience rate limits, network outages, or missing keys. I designed a dual-engine architecture: if a Groq key is configured, it leverages `openai/gpt-oss-120b`; if unconfigured or down, it gracefully degrades to the internal BookLeaf Knowledge-Base Heuristic Engine. This guarantees zero 500 errors and reliable classification under all conditions.
 
 ---
 

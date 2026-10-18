@@ -29,13 +29,14 @@ try {
 }
 
 export class AIService {
-  private openaiApiKey = (process.env.OPENAI_API_KEY || '').trim();
+  private groqApiKey = (process.env.GROQ_API_KEY || '').trim();
+  private groqModel = (process.env.GROQ_MODEL || 'openai/gpt-oss-120b').trim();
   private anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
   private geminiApiKey = process.env.GEMINI_API_KEY || '';
 
-  /** True only when a live OpenAI key was actually loaded (never exposes the key itself). */
-  public isOpenAIConfigured(): boolean {
-    return this.openaiApiKey.length > 0;
+  /** True only when a live Groq key was actually loaded (never exposes the key itself). */
+  public isAIConfigured(): boolean {
+    return this.groqApiKey.length > 0;
   }
 
   /**
@@ -85,13 +86,13 @@ export class AIService {
     const { authorName, subject, description, book } = params;
     const combinedContent = `${subject} ${description}`.trim();
 
-    // 1. If OpenAI API Key is configured, attempt call with structured response
-    if (this.openaiApiKey) {
+    // 1. If Groq API Key is configured, attempt call with structured response
+    if (this.groqApiKey) {
       try {
-        const result = await this.callOpenAI({ authorName, subject, description, book, combinedContent });
+        const result = await this.callGroq({ authorName, subject, description, book, combinedContent });
         if (result) return result;
       } catch (err) {
-        console.warn('OpenAI API call failed or timed out. Falling back to local Knowledge-Base Engine:', (err as any)?.message);
+        console.warn('Groq API call failed or timed out. Falling back to local Knowledge-Base Engine:', (err as any)?.message);
       }
     }
 
@@ -114,7 +115,7 @@ export class AIService {
     const { ticketSubject, ticketDescription, authorName, book, category, priority, additionalToneInstruction } = params;
     const combined = `${ticketSubject} ${ticketDescription}`;
 
-    if (this.openaiApiKey) {
+    if (this.groqApiKey) {
       try {
         const focusedKB = this.getFocusedContext(combined);
         const bookDetailsStr = book
@@ -145,21 +146,22 @@ ${ticketDescription}
 
 Please compose the ready-to-send support response:`;
 
-        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           signal: AbortSignal.timeout(15000),
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.openaiApiKey}`
+            Authorization: `Bearer ${this.groqApiKey}`
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
+            model: this.groqModel,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ],
             temperature: 0.3,
-            max_tokens: 500
+            max_tokens: 1200,
+            reasoning_effort: 'low'
           })
         });
 
@@ -168,7 +170,7 @@ Please compose the ready-to-send support response:`;
           return data.choices[0]?.message?.content?.trim() || '';
         }
       } catch (e) {
-        console.warn('Draft generation via OpenAI failed, utilizing built-in draft composer:', (e as any)?.message);
+        console.warn('Draft generation via Groq failed, utilizing built-in draft composer:', (e as any)?.message);
       }
     }
 
@@ -184,9 +186,9 @@ Please compose the ready-to-send support response:`;
   }
 
   /**
-   * OpenAI API Integration with token usage tracking and JSON schema parsing
+   * Groq API Integration (OpenAI-compatible chat completions) with token usage tracking and JSON schema parsing
    */
-  private async callOpenAI(params: {
+  private async callGroq(params: {
     authorName: string;
     subject: string;
     description: string;
@@ -231,26 +233,27 @@ Format response in valid JSON with keys:
   "draft_response": "..."
 }`;
 
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       signal: AbortSignal.timeout(15000),
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.openaiApiKey}`
+        Authorization: `Bearer ${this.groqApiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: this.groqModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Subject: ${subject}\n\nDescription: ${description}` }
         ],
         temperature: 0.2,
+        reasoning_effort: 'low',
         response_format: { type: 'json_object' }
       })
     });
 
     if (!resp.ok) {
-      throw new Error(`OpenAI HTTP ${resp.status}`);
+      throw new Error(`Groq HTTP ${resp.status}`);
     }
 
     const data = (await resp.json()) as any;
@@ -259,7 +262,7 @@ Format response in valid JSON with keys:
     return {
       category: content.category as TicketCategory,
       priority: content.priority as TicketPriority,
-      reasoning: content.reasoning || 'Categorized via OpenAI LLM analysis.',
+      reasoning: content.reasoning || 'Categorized via Groq LLM analysis.',
       draft_response: content.draft_response || '',
       token_usage: data.usage
         ? {
@@ -268,7 +271,7 @@ Format response in valid JSON with keys:
             total_tokens: data.usage.total_tokens
           }
         : undefined,
-      provider: 'openai'
+      provider: 'groq'
     };
   }
 

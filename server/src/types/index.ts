@@ -115,5 +115,5 @@ export interface AIClassificationResult {
     completion_tokens: number;
     total_tokens: number;
   };
-  provider: 'openai' | 'anthropic' | 'gemini' | 'bookleaf-rule-engine';
+  provider: 'groq' | 'openai' | 'anthropic' | 'gemini' | 'bookleaf-rule-engine';
 }

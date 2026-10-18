@@ -82,7 +82,7 @@ AI is implemented in [server/src/services/aiService.ts](server/src/services/aiSe
 
 | Concern | Implementation |
 |---|---|
-| Categorisation | On ticket creation, one OpenAI call (`gpt-4o-mini`, JSON mode, temperature 0.2) returns `category`, `priority`, `reasoning` and `draft_response`. Category is one of six fixed values. |
+| Categorisation | On ticket creation, one Groq call (`openai/gpt-oss-120b`, JSON mode, temperature 0.2) returns `category`, `priority`, `reasoning` and `draft_response`. Category is one of six fixed values. |
 | Priority | The model is given a rubric: Critical = active revenue loss (e.g. bestselling title unavailable); High = unresolved royalties above ₹1,000, ISBN mismatch on live stores, serious print defects; Medium = status updates and standard questions; Low = bio/metadata edits and simple enquiries. The returned reasoning is shown to admins. |
 | Draft generation | Part of the same call on creation. "Regenerate" in the ticket view calls `POST /api/ai/draft-response` (separate call, temperature 0.3, `max_tokens: 500`) and accepts an optional tone instruction. |
 | Grounding | A compact set of Knowledge Base snippets is selected by keyword (royalty, ISBN, printing, distribution, production) and added to the system prompt, plus the tone guidelines. This keeps prompts small rather than sending the whole Knowledge Base on each call. |
@@ -93,11 +93,11 @@ AI is implemented in [server/src/services/aiService.ts](server/src/services/aiSe
 
 Things to know:
 
-- **Only OpenAI is wired up.** `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` and `AI_PROVIDER` appear in `.env.example` but are not used by the code.
-- **The OpenAI key is read from `server/.env`** (loaded before any module reads the environment). `/api/health` and the start-up banner report OpenAI only when the AI service actually loaded a key. See [Environment variables](#environment-variables).
+- **Only Groq is wired up** (OpenAI-compatible chat completions endpoint). `NODE_ENV` in `.env.example` is not read by the code.
+- **The Groq key is read from `server/.env`** (loaded before any module reads the environment). `/api/health` and the start-up banner report Groq only when the AI service actually loaded a key. See [Environment variables](#environment-variables).
 - Model output for category/priority is parsed from JSON but not validated against the allowed values before it is stored; admins can correct it with the override controls.
 - The policy snippets used in prompts are written into `aiService.ts`; `knowledge_base.json` is what the Knowledge Base page and `GET /api/ai/knowledge-base` display. The two should be kept in sync if policies change.
-- Token usage returned by OpenAI is captured in the service result but is not persisted or logged.
+- Token usage returned by Groq is captured in the service result but is not persisted or logged.
 
 ---
 
@@ -112,7 +112,7 @@ The Knowledge Base is [server/src/data/knowledge_base.json](server/src/data/know
 - Production Updates (stage flow and common delay points)
 - Communication Guidelines (tone guidelines and sample response calibrations)
 
-The same policies drive the AI: keyword-selected snippets ground the OpenAI prompts, and the fallback engine's templates use the same figures (see the notes in [section 3](#3-ai-assisted-support)).
+The same policies drive the AI: keyword-selected snippets ground the Groq prompts, and the fallback engine's templates use the same figures (see the notes in [section 3](#3-ai-assisted-support)).
 
 ---
 
@@ -127,7 +127,7 @@ Versions are the ranges declared in the `package.json` files.
 | Language | TypeScript `^5.7.3` (client and server) |
 | Storage | JSON file (`server/src/data/db_store.json`) behind a small data-access class; uploads on local disk (`server/uploads/`) |
 | Authentication | JWT (`jsonwebtoken`), passwords hashed with `bcryptjs`, role-based middleware |
-| AI | OpenAI Chat Completions (`gpt-4o-mini`) via `fetch`, with a local rule-based fallback |
+| AI | Groq Chat Completions (`openai/gpt-oss-120b`) via `fetch`, with a local rule-based fallback |
 | Realtime | Server-Sent Events (native `EventSource` on the client) |
 | Animation/UI | Framer Motion `^14.3.0`, GSAP `^3.15.0`, Lucide icons, hand-written CSS |
 | Uploads | `multer` |
@@ -150,7 +150,7 @@ Express API (:5000)
               +---------------------------+-----------------------+
               |                           |                       |
         db_store.json              aiService                sseService
-        (users, books,             - OpenAI (optional)      - connected clients
+        (users, books,             - Groq (optional)        - connected clients
          tickets)                  - rule-based fallback    - per-role payloads
         uploads/ (files)
 ```
@@ -206,7 +206,7 @@ bookleaf-support-portal/
 ### Prerequisites
 
 - Node.js and npm (tested on Node v24.19.0 / npm 10.4.0).
-- An OpenAI API key is **optional**. Without it the app runs fully using the built-in fallback engine.
+- A Groq API key is **optional**. Without it the app runs fully using the built-in fallback engine.
 
 ### Installation
 
@@ -236,13 +236,13 @@ cp server/.env.example server/.env      # Windows PowerShell: Copy-Item server\.
 | `PORT` | No | API port. Default `5000`. The Vite proxy targets `http://localhost:5000`, so keep the default unless you also change `client/vite.config.ts`. |
 | `JWT_SECRET` | **Yes** | Secret used to sign and verify JWTs. Min 32 characters; startup fails if it is missing, too short or a known placeholder. There is no built-in fallback. |
 | `NODE_ENV` | No | Listed in `.env.example`; not read by the code. |
-| `OPENAI_API_KEY` | No | Enables live OpenAI calls. Without it the fallback engine is used. |
-| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `AI_PROVIDER` | No | Listed in `.env.example` but **not used** by the code. |
+| `GROQ_API_KEY` | No | Enables live Groq LLM calls. Without it the fallback engine is used. |
+| `GROQ_MODEL` | No | Model override. Default `openai/gpt-oss-120b`. |
 
 Placeholder for local use only; never commit a real key:
 
 ```
-OPENAI_API_KEY=your_api_key_here
+GROQ_API_KEY=your_api_key_here
 ```
 
 Generate a development secret (any local value of 32+ characters works; never commit it):
@@ -253,7 +253,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 Paste the output after `JWT_SECRET=` in `server/.env`. Existing tokens become invalid when the secret changes, so log in again.
 
-`server/.env` is loaded first thing at start-up, so `OPENAI_API_KEY` and `JWT_SECRET` set there are picked up. Variables already set in the shell take precedence over the file.
+`server/.env` is loaded first thing at start-up, so `GROQ_API_KEY` and `JWT_SECRET` set there are picked up. Variables already set in the shell take precedence over the file.
 
 ### Running the application
 
@@ -414,7 +414,7 @@ Manual checks used during development: the author/admin flows in the browser, pl
 - **Seed data is committed.** `db_store.json` ships in the repository so the app starts with the sample authors, books and three example tickets.
 - **SSE over WebSockets**: traffic is one-directional; see [section 13](#13-realtime-updates).
 - **AI is assistive, not autonomous.** It classifies, scores and drafts; a human decides what is sent. Failures degrade to a rule engine rather than blocking ticket creation.
-- **Cost control**: one call per new ticket, one per regeneration, `gpt-4o-mini`, keyword-selected snippets instead of the full Knowledge Base, bounded output on regeneration.
+- **Cost control**: one call per new ticket, one per regeneration, `openai/gpt-oss-120b`, keyword-selected snippets instead of the full Knowledge Base, bounded output on regeneration.
 - **Attachments are stored locally** (`server/uploads/`, git-ignored). The ticket stores the file path and original name; admins see a link on the ticket detail page (opened with the session token, since `/uploads` requires authentication). Authors' ticket views do not render the attachment.
 - **Demo-oriented authentication**: one shared demo password, an unauthenticated demo-accounts endpoint and a one-click switcher, all to make review quick.
 - **Local-only deployment**: there is no Dockerfile, hosting configuration or CI in the repository.
@@ -425,7 +425,7 @@ Manual checks used during development: the author/admin flows in the browser, pl
 
 - Single-process JSON storage: whole-file synchronous writes on every change, no transactions, not suitable for concurrent multi-instance use. The data file is tracked in git and changes as the app is used.
 - SSE connections are held in process memory, so realtime works for a single server instance only; no replay of missed events.
-- Only OpenAI is integrated; unused provider variables remain in `.env.example`. Model category/priority output is not validated before storing.
+- Only Groq is integrated. Model category/priority output is not validated before storing.
 - Uploaded files are served only to authenticated users with access to the owning ticket, but are not virus-scanned. Allowed types are PNG, JPG and PDF, max 10 MB.
 - Authentication is demo-grade: shared password, token in `localStorage`, no revocation or rate limiting, permissive CORS (`origin: true`), SSE token in the query string.
 - Assignment is "assign to me" only; there is no assignee picker or multi-admin directory.
@@ -459,4 +459,4 @@ AI-assisted development tools (Claude Code) were used for implementation support
 - **Repository status**: no remote is configured in the local clone; add the public repository URL before submitting. Local working-tree changes may be uncommitted.
 - **How to run**: `npm run setup`, then `npm run dev`; open http://localhost:5173 and sign in as `admin@bookleafpub.com` or `priya.sharma@email.com` with `password123`. No API key is required.
 - **Assumptions and trade-offs**: [section 16](#16-assumptions--trade-offs); limitations in [section 17](#17-known-limitations); the longer write-up is [WRITEUP.md](WRITEUP.md).
-- **For reviewers**: to see live OpenAI output, set `OPENAI_API_KEY` in `server/.env` (see [Environment variables](#environment-variables)); otherwise the labelled fallback engine produces the classification and drafts. To reset the data, delete `server/src/data/db_store.json` and restart (or run `npm run seed -- --force`).
+- **For reviewers**: to see live Groq output, set `GROQ_API_KEY` in `server/.env` (see [Environment variables](#environment-variables)); otherwise the labelled fallback engine produces the classification and drafts. To reset the data, delete `server/src/data/db_store.json` and restart (or run `npm run seed -- --force`).

@@ -36,7 +36,7 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     service: 'BookLeaf Author Support & Communication API',
     version: '1.0.0',
-    ai_status: aiService.isOpenAIConfigured() ? 'OpenAI GPT-4o-mini configured' : 'Built-in BookLeaf Knowledge-Base AI active'
+    ai_status: aiService.isAIConfigured() ? 'Groq LLM configured' : 'Built-in BookLeaf Knowledge-Base AI active'
   });
 });
 
@@ -101,7 +101,7 @@ app.listen(PORT, () => {
   console.log(` Status: Running on http://localhost:${PORT}`);
   console.log(` Health Check: http://localhost:${PORT}/api/health`);
   console.log(` API Spec:     http://localhost:${PORT}/api/docs`);
-  console.log(` AI Provider:  ${aiService.isOpenAIConfigured() ? 'OpenAI GPT-4o-mini' : 'BookLeaf Knowledge-Base Local Engine'}`);
+  console.log(` AI Provider:  ${aiService.isAIConfigured() ? 'Groq LLM' : 'BookLeaf Knowledge-Base Local Engine'}`);
   console.log('====================================================');
 });
 
